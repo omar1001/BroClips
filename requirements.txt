@@ -1,0 +1,7 @@
+# BroClips core packages (install.bat installs them into .venv)
+numpy>=1.24
+Pillow>=10.0
+psutil>=5.9
+onnxruntime>=1.17
+# unpacks the Arabic letter fix (fribidi) on Windows without needing Node.js
+zstandard>=0.22; sys_platform == "win32"

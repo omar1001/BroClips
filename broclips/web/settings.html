@@ -1,0 +1,431 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>BroClips — Settings</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="color-scheme" content="dark">
+<link rel="icon" href="/broclips.png">
+<link rel="stylesheet" href="/app.css">
+</head>
+<body>
+<header class="topbar">
+  <a class="brand" href="/" title="Back to your projects"><img src="/broclips.png" alt=""><span class="word">BroClips</span></a>
+  <div class="status" id="statuspill" title="The work line: BroClips does one job at a time, in this order"><span class="dot"></span><span id="work">Connecting…</span></div>
+  <button id="runnow" class="primary small" hidden onclick="runNow()" title="Start the waiting work now, even though that program is open (it may run slower)"><i data-i="play"></i>Run now</button>
+  <div class="grow"></div>
+  <nav class="seg" aria-label="Pages">
+    <a href="/" title="Back to your projects"><i data-i="clapperboard"></i><span>Projects</span></a>
+    <a href="/settings.html" title="Choose your AI, folders and other settings"><i data-i="settings"></i><span>Settings</span></a>
+    <a href="/help.html" title="How BroClips works, step by step"><i data-i="circle-help"></i><span>Help</span></a>
+  </nav>
+</header>
+<main class="page">
+ <div class="settings">
+  <div id="welcome"></div>
+  <div class="pagehead"><div><h1>Settings</h1><p>Choose the AI that does the work, where things are saved, and a few other things.</p></div></div>
+  <div id="form"><div class="loading"><div class="skel"></div><div class="skel"></div></div></div>
+ </div>
+</main>
+
+<script src="/icons.js"></script>
+<script src="/app.js"></script>
+<script>
+const LLM_PROVIDERS = [['ollama', 'Ollama — free, runs on this PC'], ['gemini', 'Google Gemini — needs a key (has a free plan)'],
+  ['openai', 'OpenAI or similar (OpenRouter, Groq, LM Studio…) — needs a key'], ['anthropic', 'Anthropic Claude — needs a key'],
+  ['fake', 'Demo — fake answers, only for testing BroClips']];
+const STT_PROVIDERS = [['local', 'On this PC (faster-whisper) — free'], ['openai', 'OpenAI or Groq — needs a key'],
+  ['gemini', 'Google Gemini — needs a key'], ['fake', 'Demo — fake words, only for testing BroClips']];
+/* the provider tiles: a two-letter mark (not a company logo), a name, one line, free or key */
+const LLM_TILES = [
+  {id: 'ollama', mark: 'Ol', name: 'Ollama', line: 'Free · private · runs on this PC', free: true},
+  {id: 'gemini', mark: 'Ge', name: 'Google Gemini', line: 'Free tier · needs a key'},
+  {id: 'openai', mark: 'AI', name: 'OpenAI / compatible', line: 'OpenAI, OpenRouter, Groq, LM Studio…'},
+  {id: 'anthropic', mark: 'Cl', name: 'Anthropic Claude', line: 'Pay per use · needs a key'},
+  {id: 'fake', mark: 'De', name: 'Demo', line: 'fake answers, only for testing BroClips', demo: true}];
+const STT_TILES = [
+  {id: 'local', mark: 'PC', name: 'On this PC', line: 'faster-whisper · free · private', free: true},
+  {id: 'openai', mark: 'AI', name: 'OpenAI or Groq', line: 'Whisper in the cloud · needs a key'},
+  {id: 'gemini', mark: 'Ge', name: 'Google Gemini', line: 'Free tier · needs a key'},
+  {id: 'fake', mark: 'De', name: 'Demo', line: 'fake words, only for testing BroClips', demo: true}];
+const KEY_INFO = {gemini: ['Google Gemini', 'https://aistudio.google.com/apikey'], anthropic: ['Anthropic', 'https://console.anthropic.com'],
+  openai: ['OpenAI', 'https://platform.openai.com/api-keys'], openrouter: ['OpenRouter', 'https://openrouter.ai/keys'],
+  groq: ['Groq', 'https://console.groq.com/keys'], lmstudio: ['LM Studio', ''], custom: ['your service', '']};
+const WHISPER = [['auto', 'Automatic (large-v3 with an NVIDIA card, else small)'], ['large-v3', 'large-v3 — best, needs an NVIDIA card'],
+  ['medium', 'medium'], ['small', 'small — good on a normal processor'], ['base', 'base — fast, less exact'], ['tiny', 'tiny — fastest, least exact']];
+const DEVICES = [['auto', 'Automatic'], ['cuda', 'NVIDIA graphics card'], ['cpu', 'Processor only']];
+const ENCODERS = [['auto', 'Automatic (NVIDIA card if you have one)'], ['nvenc', 'NVIDIA graphics card — fast'],
+  ['x264', 'Processor only — works on every PC, slower']];
+
+let S = null, WELCOME = new URLSearchParams(location.search).has('welcome'), lastAssets = '';
+
+function inp(id, val, ph, title, extra) {
+  return `<input type="text" id="${id}" value="${esc(val ?? '')}" placeholder="${esc(ph || '')}" title="${esc(title || '')}" spellcheck="false" ${extra || ''}>`;
+}
+function sel(id, list, cur, title) { return `<select id="${id}" title="${esc(title || '')}">${opts(list, cur)}</select>`; }
+const norm = u => String(u || '').trim().replace(/\/+$/, '').toLowerCase();
+function keyNameFor(base) {
+  const p = S.llm_presets.concat(S.stt_presets).find(p => p.base_url && norm(p.base_url) === norm(base));
+  return p ? p.key : 'custom';
+}
+function presetOpts(list, base) {
+  const cur = (list.find(p => p.base_url && norm(p.base_url) === norm(base)) || {id: 'custom'}).id;
+  return list.map(p => `<option value="${p.id}" ${p.id === cur ? 'selected' : ''}>${esc(p.name)}</option>`).join('');
+}
+
+/* the provider tiles (a radio group) drive a hidden <select>, which the rest of the page reads */
+function provTiles(r, tiles, list, cur, label) {
+  return `<div class="ptiles" role="radiogroup" aria-label="${esc(label)}" style="--n:${tiles.filter(t => !t.demo).length}">${tiles.map(t => `<button type="button"
+      class="tile ptile ${t.demo ? 'demo-tile' : ''}" role="radio" aria-checked="${t.id === cur}" data-r="${r}" data-v="${t.id}"
+      onclick="pickProv('${r}','${t.id}')" title="${esc(t.name)} — ${esc(t.line)}">
+      ${t.demo ? '' : `<span class="tick">${ic('check')}</span>`}<span class="lm c-${t.id}">${t.mark}</span>
+      <span><b>${esc(t.name)}${t.demo ? '' : ` <span class="ftag ${t.free ? 'free' : ''}">${t.free ? 'Free' : 'Key'}</span>`}</b><small>${esc(t.line)}</small></span></button>`).join('')}</div>
+    <select id="${r}_provider" hidden>${opts(list, cur)}</select>`;
+}
+function pickProv(r, v) {
+  const s = $('#' + r + '_provider');
+  s.value = v;
+  document.querySelectorAll(`.ptile[data-r="${r}"]`).forEach(b => b.setAttribute('aria-checked', String(b.dataset.v === v)));
+  if (s.onchange) s.onchange();
+}
+
+/* a key field: the saved key is never shown, only its last 4 characters */
+function keyInner(name) {
+  const masked = S.keys[name], [who, url] = KEY_INFO[name] || [name, ''];
+  return `<div class="field"><span class="lbl">${ic('key-round')} ${esc(who)} key</span>
+    <div class="keybox"><input type="password" data-key="${name}" autocomplete="off" spellcheck="false"
+        placeholder="${masked ? `Saved (${masked}) — leave empty to keep it` : 'Paste your key here'}"
+        title="Your key stays on this PC (in secrets.json) and is only sent to ${esc(who)}">
+      ${masked ? `<button class="small danger" onclick="removeKey(this,'${name}')" title="Delete this key from this PC">${ic('trash')}Remove key</button>` : ''}</div>
+    ${masked ? `<span class="saved-key">${ic('circle-check')}A key is saved (${esc(masked)})</span>` : ''}
+    <span class="hint">${url ? `Get a key: <a href="${url}" target="_blank" rel="noopener">${url.replace('https://', '')}</a>. ` : ''}It stays on this PC and is only sent to ${esc(who)}.</span></div>`;
+}
+function keyField(name) { return `<div class="keyfield" data-name="${name}">${keyInner(name)}</div>`; }
+function refreshKeys() { document.querySelectorAll('.keyfield').forEach(k => { k.innerHTML = keyInner(k.dataset.name); }); }
+
+function welcomeCard() {
+  return `<div class="card glowcard welcome"><div class="card-h"><span class="ibadge">${ic('rocket')}</span>
+      <div class="tx-h"><h2>Welcome to BroClips! 👋</h2><div class="sub">First choose the AI that does the work. Two easy ways:</div></div></div>
+    <div class="welcome-grid">
+      <div><b class="wt">${ic('shield-check')}Free and private</b><span class="hint">Everything stays on your PC: keep <b>Ollama</b> and <b>On this PC</b> below.
+        You need Ollama and one model — <a href="/help.html#start">see how (2 steps)</a>.</span></div>
+      <div><b class="wt">${ic('key-round')}With a key</b><span class="hint">Faster on a weak PC: pick Google Gemini (has a free plan), OpenAI or
+        Anthropic and paste your key.</span></div></div>
+    <div class="row between"><span class="hint">Not sure? Keep everything as it is, press <b>Save</b> at the bottom, and read Help later. You can change all of this at any time.</span>
+      <button onclick="skipWelcome()" title="Use the normal settings for now">Skip for now${ic('arrow-right')}</button></div></div>`;
+}
+
+async function load() {
+  S = await api('/api/settings');
+  if (S.offline) { $('#form').innerHTML = `<div class="note bad">${ic('triangle-alert')}<div>${esc(S.error)}</div></div>`; return; }
+  WELCOME = WELCOME || S.first_run;
+  render();
+}
+
+function note(kind, icon, html) { return `<div class="note ${kind}">${ic(icon)}<div>${html}</div></div>`; }
+
+function render() {
+  const s = S.settings, t = s.thinking, l = s.listening;
+  $('#welcome').innerHTML = WELCOME ? welcomeCard() : '';
+  $('#form').innerHTML = `
+  <div class="card"><div class="card-h"><span class="ibadge violet">${ic('brain')}</span>
+      <div class="tx-h"><h3>Thinking AI</h3><div class="sub">Picks the best moments and writes the titles.</div></div></div>
+    ${provTiles('t', LLM_TILES, LLM_PROVIDERS, t.provider, 'Which AI thinks?')}
+    <div class="provbox">
+    <div data-t="ollama">
+      ${note('good', 'shield-check', `Free and private: nothing leaves your PC. You need Ollama (<a href="https://ollama.com" target="_blank" rel="noopener">ollama.com</a>) and one model — see <a href="/help.html#start">Help</a>.`)}
+      <label class="field"><span class="lbl">Ollama address</span>${inp('t_ollama_url', t.ollama.url, 'http://127.0.0.1:11434', 'Where Ollama answers. Keep the default unless you changed it.')}</label>
+      <div class="field"><span class="lbl">Model</span>
+        <div class="row">${inp('t_ollama_model', t.ollama.model, 'gemma3:12b', 'The name of the Ollama model', 'list="ollama_models" style="flex:1"')}
+          <button onclick="findModels(this)" title="Ask Ollama which models are on this PC">${ic('refresh-cw')}My models</button></div>
+        <datalist id="ollama_models"></datalist>
+        <span class="hint" id="models_msg">For example <code>gemma3:12b</code> (best with a graphics card with 12 GB or more) or <code>gemma3:4b</code> for smaller PCs.</span></div>
+      <details><summary>Advanced: start a private Ollama server <span class="hint">(most people do not need this)</span></summary>
+        <div class="hint">BroClips can start its own Ollama, for example with the models on another disk. It uses its own port.</div>
+        <label class="check"><input type="checkbox" class="switch" id="t_manage_enabled" ${t.ollama.manage.enabled ? 'checked' : ''}> Start a private Ollama server</label>
+        <label class="field"><span class="lbl">ollama.exe</span>${inp('t_manage_exe', t.ollama.manage.exe, 'C:\\Users\\you\\AppData\\Local\\Programs\\Ollama\\ollama.exe', 'The full path of ollama.exe')}</label>
+        <div class="field"><span class="lbl">Models folder</span><div class="row">${inp('t_manage_models_dir', t.ollama.manage.models_dir, 'Empty = the normal place', 'Where this private server keeps its models', 'style="flex:1"')}
+          <button onclick="pickInto('t_manage_models_dir','Choose the Ollama models folder')" title="Choose a folder">${ic('folder')}Choose…</button></div></div>
+        <div class="grid2">
+          <label class="field"><span class="lbl">Port</span><input type="number" id="t_manage_port" min="1024" max="65535" value="${t.ollama.manage.port}" style="width:140px" title="The private server's port (not 11434)"></label>
+          <label class="field"><span class="lbl">Text memory (num_ctx)</span><input type="number" id="t_ollama_num_ctx" min="2048" max="262144" step="1024" value="${t.ollama.num_ctx}" style="width:140px" title="How much text the model reads at once. Bigger needs more memory."></label></div>
+      </details>
+    </div>
+    <div data-t="gemini">
+      ${note('info', 'cloud', 'Google’s cloud AI. The text of what is said is sent to Google (pictures only if you allow it below). On the free plan Google may use what you send to improve its products.')}
+      ${keyField('gemini')}
+      <label class="field"><span class="lbl">Model <span class="hint">(optional)</span></span>${inp('t_gemini_model', t.gemini.model, 'Empty = the default model', 'Leave empty unless you know which Gemini model you want')}</label>
+    </div>
+    <div data-t="openai">
+      ${note('info', 'cloud', 'OpenAI, or any service that works the same way. The text of what is said is sent to that service.')}
+      <div class="grid2">
+        <label class="field"><span class="lbl">Service</span><select id="t_openai_preset" onchange="presetPicked('t')" title="Pick your service: its address is filled in for you">${presetOpts(S.llm_presets, t.openai.base_url)}</select></label>
+        <label class="field"><span class="lbl">Address</span>${inp('t_openai_base', t.openai.base_url, 'https://…/v1', 'The service address (usually ends with /v1)', `oninput="baseTyped('t')"`)}</label></div>
+      <label class="field"><span class="lbl">Model</span>${inp('t_openai_model', t.openai.model, 'The model name, exactly as the service writes it', 'For example gpt-4o-mini on OpenAI')}</label>
+      <div id="t_openai_key"></div>
+    </div>
+    <div data-t="anthropic">
+      ${note('info', 'cloud', 'Anthropic’s Claude. The text of what is said is sent to Anthropic.')}
+      ${keyField('anthropic')}
+      <label class="field"><span class="lbl">Model <span class="hint">(optional)</span></span>${inp('t_anthropic_model', t.anthropic.model, 'Empty = the default model', 'Leave empty unless you know which Claude model you want')}</label>
+    </div>
+    <div data-t="fake">${note('', 'flask-conical', 'Fake answers, only for testing BroClips itself. The results will be nonsense.')}</div>
+    <div class="testrow"><button class="blue" onclick="testAI('thinking',this)" title="Save, then ask this AI a tiny question to check that it works">${ic('flask-conical')}Test</button>
+      <span id="thinking_test" class="status-line"></span></div>
+    </div>
+  </div>
+
+  <div class="card"><div class="card-h"><span class="ibadge cyan">${ic('ear')}</span>
+      <div class="tx-h"><h3>Listening AI</h3><div class="sub">Turns what is said into text, with the time of every word.</div></div></div>
+    ${provTiles('l', STT_TILES, STT_PROVIDERS, l.provider, 'Which AI listens?')}
+    <div class="provbox">
+    <div data-l="local">
+      ${note('good', 'shield-check', 'Free and private. The first time, it downloads its speech model (large-v3 about 3 GB, small about 0.5 GB). Needs the “local speech-to-text” part of the installer.')}
+      <div class="grid2">
+        <label class="field"><span class="lbl">Model</span>${sel('l_local_model', WHISPER, l.local.model, 'Bigger = more exact but slower')}</label>
+        <label class="field"><span class="lbl">Runs on</span>${sel('l_local_device', DEVICES, l.local.device, 'NVIDIA graphics card (fast) or the processor (slow)')}</label></div>
+      <details><summary>Advanced</summary>
+        <div class="field"><span class="lbl">Speech models folder</span><div class="row">${inp('l_local_models_dir', l.local.models_dir, 'Empty = the normal place', 'Where speech models are kept', 'style="flex:1"')}
+          <button onclick="pickInto('l_local_models_dir','Choose where speech models are kept')" title="Choose a folder">${ic('folder')}Choose…</button></div></div>
+      </details>
+    </div>
+    <div data-l="openai">
+      ${note('warn', 'triangle-alert', 'Your audio is sent to this service to be turned into text.')}
+      <div class="grid2">
+        <label class="field"><span class="lbl">Service</span><select id="l_openai_preset" onchange="presetPicked('l')" title="Pick your service: its address is filled in for you">${presetOpts(S.stt_presets, l.openai.base_url)}</select></label>
+        <label class="field"><span class="lbl">Address</span>${inp('l_openai_base', l.openai.base_url, 'https://…/v1', 'The service address (usually ends with /v1)', `oninput="baseTyped('l')"`)}</label></div>
+      <label class="field"><span class="lbl">Model</span>${inp('l_openai_model', l.openai.model, 'whisper-1', 'whisper-1 on OpenAI, whisper-large-v3 on Groq')}</label>
+      <div id="l_openai_key"></div>
+    </div>
+    <div data-l="gemini">
+      ${note('warn', 'triangle-alert', 'Your audio is sent to Google to be turned into text. On the free plan Google may use it to improve its products.')}
+      ${keyField('gemini')}
+      <label class="field"><span class="lbl">Model <span class="hint">(optional)</span></span>${inp('l_gemini_model', l.gemini.model, 'Empty = the default model', 'Leave empty unless you know which Gemini model you want')}</label>
+    </div>
+    <div data-l="fake">${note('', 'flask-conical', 'Fake words, only for testing BroClips itself.')}</div>
+    <div class="testrow"><button class="blue" onclick="testAI('listening',this)" title="Save, then check that this AI is ready">${ic('flask-conical')}Test</button>
+      <span id="listening_test" class="status-line"></span></div>
+    </div>
+  </div>
+
+  <div class="card"><div class="switchcard">
+    <span class="ibadge green">${ic('lock')}</span>
+    <div class="tx-h"><label for="allow_images" class="swtitle">Allow sending pictures (video frames) to cloud AI</label>
+      <div class="hint">Off: a cloud AI only gets the text of what is said. On: it may also look at a few pictures from your video, which helps it choose.
+        Ollama and “On this PC” never send anything anywhere. Your video file itself is never uploaded.</div></div>
+    <input type="checkbox" class="switch" id="allow_images" title="Off by default" ${s.allow_images_to_cloud ? 'checked' : ''}>
+  </div></div>
+
+  <div class="card"><div class="card-h"><span class="ibadge amber">${ic('folder-open')}</span>
+      <div class="tx-h"><h3>Folders</h3><div class="sub">Where BroClips keeps its things. Your own videos never move.</div></div></div>
+    <div class="field"><span class="lbl">Data folder</span>
+      <div class="row">${inp('data_dir', S.data_dir, S.default_data_dir, 'Settings, keys, projects and downloads live here', 'style="flex:1;min-width:260px"')}
+        <button onclick="pickInto('data_dir','Choose the BroClips data folder')" title="Choose a folder">${ic('folder')}Choose…</button>
+        <button onclick="openFolder('data')" title="Open it in File Explorer">${ic('external-link')}Open</button></div>
+      <span class="hint">Settings, keys, projects and downloads live here. If you change it, your settings and keys come along; projects already made stay in the old folder.</span></div>
+    <div class="field"><span class="lbl">Output folder</span>
+      <div class="row">${inp('output_dir', s.output_dir, 'Empty = inside the data folder', 'Where projects and everything BroClips makes are saved', 'style="flex:1;min-width:260px"')}
+        <button onclick="pickInto('output_dir','Choose where BroClips saves what it makes')" title="Choose a folder">${ic('folder')}Choose…</button>
+        <button onclick="$('#output_dir').value=''" title="Use the normal place (inside the data folder)">Default</button>
+        <button onclick="openFolder('projects')" title="Open it in File Explorer">${ic('external-link')}Open</button></div>
+      <span class="hint" id="projects_dir_hint">Where your projects and everything BroClips makes are saved (now: ${esc(S.projects_dir)}). If you change it, the project list starts empty — old projects stay where they are.</span></div>
+  </div>
+
+  <div class="card"><div class="card-h"><span class="ibadge pink">${ic('film')}</span>
+      <div class="tx-h"><h3>Making videos</h3><div class="sub">How videos are encoded, and what new projects start with.</div></div></div>
+    <div class="grid3">
+      <label class="field"><span class="lbl">Video encoder</span>${sel('encoder', ENCODERS, s.encoder, 'What makes the video files')}</label>
+      <label class="field"><span class="lbl">Language for new projects</span>${sel('language', LANGS, s.language, 'Each project can change it')}</label>
+      <label class="field"><span class="lbl">Shorts per video (new projects)</span><input type="number" id="max_shorts" min="1" max="30" value="${s.max_shorts}" style="width:120px" title="The most Shorts made from one video"></label></div>
+  </div>
+
+  <div class="two">
+    <div class="card"><div class="card-h"><span class="ibadge amber">${ic('circle-pause')}</span>
+        <div class="tx-h"><h3>Pause while these programs run</h3><div class="sub">So your game stays smooth.</div></div></div>
+      <textarea id="pause_list" rows="3" spellcheck="false" placeholder="League of Legends.exe" title="One program per line">${esc((s.pause_while_running || []).join('\n'))}</textarea>
+      <div class="hint">One program per line. While one of them is open, BroClips waits (you can still press <b>Run now</b>).
+        Find the exact name in Task Manager → Details.</div>
+    </div>
+    <div class="card"><div class="card-h"><span class="ibadge">${ic('square-dashed')}</span>
+        <div class="tx-h"><h3>Always blur these areas</h3><div class="sub">For a watermark or private info.</div></div></div>
+      <textarea id="blur_list" rows="3" spellcheck="false" placeholder="1550, 990, 360, 80" title="One area per line: left, top, width, height">${esc((s.blur_boxes || []).map(b => b.join(', ')).join('\n'))}</textarea>
+      <div class="hint">Blurred in everything BroClips makes. One area per line: <b>left, top, width, height</b>, on a 1920 × 1080 picture.
+        <code>1550, 990, 360, 80</code> is the bottom-right corner.</div>
+    </div>
+  </div>
+
+  <div class="card"><div class="card-h"><span class="ibadge cyan">${ic('download')}</span>
+      <div class="tx-h"><h3>Fonts, emoji and the cut-out model</h3><div class="sub">Free extras for captions and thumbnails.</div></div></div>
+    <div id="assets_status"></div>
+    <details><summary>Advanced: use a cut-out model file you already have</summary>
+      <label class="field"><span class="lbl">Cut-out model file (.onnx)</span>${inp('cutout_model', s.cutout_model, 'Empty = the one downloaded above', 'The full path of a BiRefNet .onnx file')}</label>
+    </details>
+  </div>
+
+  <div class="savebar"><button class="go big" onclick="save()" title="Save all settings">${ic('save')}Save</button><span id="savemsg" class="status-line"></span>
+    <span class="hint" style="margin-left:auto">Keys stay on this PC (secrets.json) and are never shown again in full.</span></div>`;
+  $('#t_provider').onchange = () => { showProv('t'); $('#thinking_test').textContent = ''; };
+  $('#l_provider').onchange = () => { showProv('l'); $('#listening_test').textContent = ''; };
+  showProv('t'); showProv('l');
+  renderPresetKey('t'); renderPresetKey('l');
+  lastAssets = ''; renderAssets();
+}
+
+function showProv(r) {
+  const v = $('#' + r + '_provider').value;
+  document.querySelectorAll(`[data-${r}]`).forEach(el => { el.hidden = el.dataset[r] !== v; });
+}
+
+function presetList(r) { return r === 't' ? S.llm_presets : S.stt_presets; }
+function presetPicked(r) {
+  const p = presetList(r).find(p => p.id === $(`#${r}_openai_preset`).value);
+  if (p && p.id !== 'custom') { $(`#${r}_openai_base`).value = p.base_url; $(`#${r}_openai_model`).value = p.model || ''; }
+  if (p && p.id === 'custom') { $(`#${r}_openai_base`).value = ''; $(`#${r}_openai_base`).focus(); }
+  renderPresetKey(r);
+}
+function baseTyped(r) {
+  const base = $(`#${r}_openai_base`).value;
+  const p = presetList(r).find(p => p.base_url && norm(p.base_url) === norm(base));
+  $(`#${r}_openai_preset`).value = p ? p.id : 'custom';
+  renderPresetKey(r);
+}
+function renderPresetKey(r) {
+  const box = $(`#${r}_openai_key`), name = keyNameFor($(`#${r}_openai_base`).value);
+  if (box.dataset.name !== name) { box.dataset.name = name; box.className = 'keyfield'; box.innerHTML = keyInner(name); }
+}
+
+function astat(ok, text, icon) {
+  return `<span class="astat ${ok ? 'ok' : 'miss'}">${ic(ok ? 'circle-check' : icon)}${esc(text)}</span>`;
+}
+
+function renderAssets() {
+  const a = S.assets, key = JSON.stringify(a);
+  if (key === lastAssets) return;
+  lastAssets = key;
+  $('#assets_status').innerHTML = `
+    <div class="assetrow">${astat(a.fonts.have === a.fonts.of, `Fonts ${a.fonts.have} of ${a.fonts.of}`, 'type')}
+      ${astat(a.emoji.have === a.emoji.of, `3D emoji ${a.emoji.have} of ${a.emoji.of}`, 'smile')}
+      ${a.fribidi === null ? '' : astat(a.fribidi, `Arabic letter fix ${a.fribidi ? 'ready' : 'missing'}`, 'languages')}</div>
+    ${a.essential_ok ? `<div class="hint ok">All there.</div>`
+      : `<div class="row" style="margin-top:8px"><button onclick="download('essential',this)" title="Download the free fonts and 3D emoji used for captions and thumbnails">${ic('download')}Download fonts and emoji (about 5 MB)</button></div>`}
+    <div class="divide" style="margin:16px 0"></div>
+    <div class="sec-t">${ic('scissors')}Cut-out model <span class="hint">— finds the person or thing in a picture, for thumbnails</span></div>
+    <div class="assetrow">${a.cutout.path ? astat(true, 'Ready', 'circle-check') + `<span class="hint" style="align-self:center;overflow-wrap:anywhere">${esc(a.cutout.path)}</span>`
+      : astat(false, 'Not downloaded yet', 'info')}</div>
+    ${a.cutout.path ? '' : '<div class="hint">Thumbnails work without it, but cannot cut out a person.</div>'}
+    ${a.cutout.general && a.cutout.lite ? '' : `<div class="row" style="margin-top:8px">
+      ${a.cutout.general ? '' : `<button onclick="download('general',this)" title="The best cut-outs">${ic('download')}Full model (928 MB, best)</button>`}
+      ${a.cutout.lite ? '' : `<button onclick="download('lite',this)" title="Smaller and faster, a little less exact">${ic('download')}Light model (214 MB)</button>`}</div>`}
+    <div class="hint">Downloads go slowly on purpose (about 1 MB per second), so games and videos stay smooth. You can watch them at the top of the page.</div>`;
+}
+
+function parseBlur() {
+  const out = [], lines = $('#blur_list').value.split('\n').map(s => s.trim()).filter(Boolean);
+  for (let i = 0; i < lines.length; i++) {
+    const n = lines[i].split(/[\s,;x×]+/).filter(Boolean).map(Number);
+    if (n.length !== 4 || n.some(x => !isFinite(x) || x < 0) || n[2] <= 0 || n[3] <= 0)
+      return {error: `Blur areas, line ${i + 1}: write 4 numbers — left, top, width, height (for example 1550, 990, 360, 80).`};
+    out.push(n.map(Math.round));
+  }
+  return {boxes: out};
+}
+
+function collect(boxes) {
+  const v = id => $('#' + id).value.trim(), c = id => $('#' + id).checked, n = (id, d) => +$('#' + id).value || d;
+  return {
+    thinking: {provider: v('t_provider'),
+      ollama: {url: v('t_ollama_url'), model: v('t_ollama_model'), num_ctx: n('t_ollama_num_ctx', 16384),
+        manage: {enabled: c('t_manage_enabled'), exe: v('t_manage_exe'), models_dir: v('t_manage_models_dir'), port: n('t_manage_port', 11435)}},
+      gemini: {model: v('t_gemini_model')}, openai: {base_url: v('t_openai_base'), model: v('t_openai_model')},
+      anthropic: {model: v('t_anthropic_model')}},
+    listening: {provider: v('l_provider'),
+      local: {model: v('l_local_model'), device: v('l_local_device'), models_dir: v('l_local_models_dir')},
+      openai: {base_url: v('l_openai_base'), model: v('l_openai_model')}, gemini: {model: v('l_gemini_model')}},
+    allow_images_to_cloud: c('allow_images'), language: v('language'), output_dir: v('output_dir'), encoder: v('encoder'),
+    max_shorts: n('max_shorts', 8), cutout_model: v('cutout_model'),
+    pause_while_running: v('pause_list').split('\n').map(s => s.trim()).filter(Boolean), blur_boxes: boxes};
+}
+
+function collectKeys() {
+  const keys = {};
+  document.querySelectorAll('input[data-key]').forEach(i => { if (i.value.trim()) keys[i.dataset.key] = i.value.trim(); });
+  return keys;
+}
+
+async function save(quiet) {
+  const b = parseBlur(), msg = $('#savemsg');
+  if (b.error) { msg.innerHTML = `<span class="tbadge bad">${ic('triangle-alert')}${esc(b.error)}</span>`; if (quiet) toast(b.error, true); return false; }
+  if (!quiet) msg.innerHTML = `<span class="tbadge run">${ic('loader', 'spin')}Saving…</span>`;
+  const r = await api('/api/settings', {settings: collect(b.boxes), keys: collectKeys(), data_dir: $('#data_dir').value.trim()});
+  if (!r.ok) { msg.innerHTML = `<span class="tbadge bad">${ic('triangle-alert')}${esc(r.error)}</span>`; if (quiet) toast(r.error, true); return false; }
+  S = r;
+  refreshKeys();
+  $('#data_dir').value = S.data_dir;
+  $('#projects_dir_hint').innerHTML = `Where your projects and everything BroClips makes are saved (now: ${esc(S.projects_dir)}). If you change it, the project list starts empty — old projects stay where they are.`;
+  msg.innerHTML = `<span class="tbadge ok">${ic('circle-check')}Saved</span>` + (WELCOME ? ' <a href="/">Now go to your projects →</a>' : '');
+  return true;
+}
+
+async function skipWelcome() {
+  const r = await api('/api/settings', {settings: {}});
+  if (!r.ok) { toast(r.error, true); return; }
+  location.href = '/';
+}
+
+async function testAI(role, btn) {
+  const out = $('#' + role + '_test');
+  btn.disabled = true;
+  out.innerHTML = `<span class="tbadge run">${ic('loader', 'spin')}Saving and testing…</span> <span class="hint">(a model on this PC can take a minute the first time)</span>`;
+  if (!await save(true)) { btn.disabled = false; out.textContent = ''; return; }
+  const r = await api('/api/providers/test', {role});
+  btn.disabled = false;
+  out.innerHTML = r.ok ? `<span class="tbadge ok">${ic('circle-check')}${esc(r.message)}</span>`
+                       : `<span class="tbadge bad">${ic('triangle-alert')}${esc(r.message || r.error)}</span>`;
+}
+
+async function findModels(btn) {
+  btn.disabled = true;
+  const m = $('#models_msg');
+  m.textContent = 'Asking Ollama…';
+  if (!await save(true)) { btn.disabled = false; return; }
+  const r = await api('/api/providers/models');
+  btn.disabled = false;
+  if (!r.ok || !r.models.length) {
+    m.innerHTML = `<span class="err">${esc(r.error || 'Ollama has no models yet. Download one: open a terminal and run  ollama pull gemma3:12b')}</span>`;
+    return;
+  }
+  $('#ollama_models').innerHTML = r.models.map(x => `<option value="${esc(x)}">`).join('');
+  m.innerHTML = `<span class="ok">Found ${r.models.length}:</span> ${r.models.map(x => `<code>${esc(x)}</code>`).join(' ')} — click the Model box to pick one.`;
+}
+
+async function pickInto(id, title) {
+  const r = await api('/api/pick_folder', {title, initial: $('#' + id).value.trim()});
+  if (!r.ok) { toast(r.error, true); return; }
+  if (r.path) $('#' + id).value = r.path;
+}
+
+async function removeKey(btn, name) {
+  if (!confirmClick(btn, 'Remove? Click again')) return;
+  const r = await api('/api/keys/remove', {name});
+  if (!r.ok) { toast(r.error, true); return; }
+  S.keys = r.keys;
+  refreshKeys();
+  toast('Key removed from this PC.');
+}
+
+async function download(what, btn) {
+  btn.disabled = true;
+  const r = await api('/api/assets/download', {what});
+  if (!r.ok) { btn.disabled = false; toast(r.error, true); return; }
+  toast('Added to the work line. Watch the progress at the top of the page.');
+}
+
+window.onState = async st => {
+  if (!S || S.offline) { if (st && !st.offline) load(); return; }
+  const a = await api('/api/assets');
+  if (a && a.fonts) { S.assets = a; renderAssets(); }
+};
+load();
+</script>
+</body>
+</html>

@@ -1,0 +1,1024 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>BroClips</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="color-scheme" content="dark">
+<link rel="icon" href="/broclips.png">
+<link rel="stylesheet" href="/app.css">
+</head>
+<body>
+<header class="topbar">
+  <a class="brand" href="/" title="Your projects"><img src="/broclips.png" alt=""><span class="word">BroClips</span></a>
+  <div class="status" id="statuspill" title="The work line: BroClips does one job at a time, in this order"><span class="dot"></span><span id="work">Connecting…</span></div>
+  <button id="runnow" class="primary small" hidden onclick="runNow()" title="Start the waiting work now, even though that program is open (it may run slower)"><i data-i="play"></i>Run now</button>
+  <div class="grow"></div>
+  <nav class="seg" aria-label="Pages">
+    <a href="/" title="Your projects and videos"><i data-i="clapperboard"></i><span>Projects</span></a>
+    <a href="/settings.html" title="Choose your AI, folders and other settings"><i data-i="settings"></i><span>Settings</span></a>
+    <a href="/help.html" title="How BroClips works, step by step"><i data-i="circle-help"></i><span>Help</span></a>
+  </nav>
+</header>
+<div class="wrap">
+  <aside>
+    <div class="side-head" title="A project is a group of similar videos, for example “My Python lessons”"><span>Projects</span><span class="count" id="pcount" hidden></span></div>
+    <div id="plist"></div>
+    <div class="sidefoot">
+      <div id="newbox" hidden>
+        <input type="text" id="newname" class="wide" maxlength="80" placeholder="Name, e.g. Python lessons" dir="auto"
+               title="Give the project a short name" onkeydown="if(event.key==='Enter')createProject();if(event.key==='Escape')toggleNew(false)">
+        <div class="row" style="margin-top:10px">
+          <button class="go small" onclick="createProject()" title="Make the project"><i data-i="check"></i>Create</button>
+          <button class="small ghost" onclick="toggleNew(false)" title="Do not make a project">Cancel</button>
+        </div>
+      </div>
+      <button class="go big" id="newbtn" onclick="toggleNew(true)"
+              title="Start a new project: a group of similar videos (for example your Python lessons)"><i data-i="plus"></i>New project</button>
+    </div>
+  </aside>
+  <main id="main"><div class="loading"><div class="skel"></div><div class="skel"></div><div class="skel"></div></div></main>
+</div>
+
+<script src="/icons.js"></script>
+<script src="/app.js"></script>
+<script>
+const STEPS = ['Getting the video ready', 'Listening to what is said', 'Finding the best moments', 'Making the Shorts',
+               'Making the long video', 'Writing titles and making thumbnails'];
+const STEP_FUN = ['Warming up your video…', 'Listening to every word…', 'Hunting for the best moments…',
+                  'Cutting your Shorts…', 'Trimming the quiet bits…', 'Writing titles…'];
+const TYPES = [['gameplay', 'Gameplay'], ['camera', 'Talking to the camera'], ['screen', 'Screen recording (tutorial)'],
+               ['podcast', 'Podcast'], ['other', 'Something else']];
+const TYPE_INFO = {gameplay: ['gamepad', 'Gameplay', 'Games with your commentary — the picture follows the action'],
+  camera: ['video', 'Talking to camera', 'You on camera — you stay in the picture'],
+  screen: ['monitor', 'Screen recording', 'Tutorials and lessons — the whole screen stays readable'],
+  podcast: ['mic', 'Podcast', 'Conversations — the best answers and stories'],
+  other: ['clapperboard', 'Something else', 'Anything else where someone talks']};
+const PLATFORMS = [['youtube', 'YouTube (long video)'], ['shorts', 'YouTube Shorts'], ['tiktok', 'TikTok'], ['reels', 'Instagram Reels']];
+const PLAT_INFO = {youtube: ['youtube', 'YouTube', 'long video'], shorts: ['shorts', 'Shorts', ''],
+                   tiktok: ['music', 'TikTok', ''], reels: ['instagram', 'Reels', '']};
+const LAYOUTS = [['auto', 'Best for the video type'], ['follow', 'Follow the action (crop the picture)'],
+                 ['zoom', 'Zoom on the action over a blurred background'], ['fit', 'Whole picture, nothing cut off']];
+const BADGE = {new: 'New', queued: 'In line', waiting: 'Waiting', working: 'Working', done: 'Done', failed: 'Failed',
+               stopped: 'Stopped'};
+const EXAMPLES = [
+  ['gamepad', 'Gaming commentary', 'My funny gaming commentary in English — jokes, reactions and big fights. For YouTube Shorts and TikTok, plus the full game on YouTube. Energetic tone.'],
+  ['book-open', 'School lessons', 'Short lessons for high-school students, in English. For YouTube Shorts and Instagram Reels. Clear, friendly and simple.'],
+  ['monitor', 'Coding tutorials', 'Short Python lessons for beginners, in English, for YouTube Shorts and TikTok. Friendly and simple.'],
+  ['mic', 'Podcast clips', 'Clips from my podcast about tech and life, in English. For Shorts, TikTok and Reels. Keep the funniest and smartest moments.']];
+const AV = [['#ff4d8d', '#8b5cf6'], ['#8b5cf6', '#22d3ee'], ['#22d3ee', '#22c55e'], ['#f59e0b', '#ff4d8d'],
+            ['#38bdf8', '#8b5cf6'], ['#f472b6', '#f59e0b'], ['#22c55e', '#0ea5e9']];
+
+let PROJECTS = [], P = null, VIDEOS = [], ROUTE = {}, formFor = '', lastPlist = '', lastVlist = '', lastVpage = '', saveTimer = null;
+
+function noBubble(e) { e.stopPropagation(); }
+
+function parseHash() {
+  const h = new URLSearchParams(location.hash.slice(1));
+  return {p: h.get('p') || '', v: h.get('v') || ''};
+}
+
+async function init() {
+  const s = await api('/api/state');
+  if (s.first_run) { location.replace('/settings.html?welcome=1'); return; }
+  await loadProjects();
+  window.onhashchange = show;
+  show();
+}
+
+/* ---------- the projects on the left ---------- */
+function avatar(name) {
+  const s = String(name || '?');
+  let h = 0;
+  for (const ch of s) h = (h * 31 + ch.codePointAt(0)) >>> 0;
+  const [a, b] = AV[h % AV.length];
+  const letter = ([...s.trim()].find(ch => /[\p{L}\p{N}]/u.test(ch)) || '?').toUpperCase();
+  return `<span class="avatar" style="background:linear-gradient(135deg,${a},${b})" aria-hidden="true">${esc(letter)}</span>`;
+}
+
+function busyProjects() {
+  const w = STATE && STATE.work, out = {};
+  if (!w) return out;
+  for (const j of w.waiting || []) if (j.project) out[j.project] = 'wait';
+  if (w.current && w.current.project) out[w.current.project] = 'live';
+  return out;
+}
+
+async function loadProjects() {
+  const r = await api('/api/projects');
+  if (r.offline) return;
+  PROJECTS = r.projects || [];
+  const busy = busyProjects();
+  const key = JSON.stringify([PROJECTS, ROUTE.p, busy]);
+  if (key === lastPlist) return;
+  lastPlist = key;
+  const pc = $('#pcount');
+  pc.textContent = PROJECTS.length; pc.hidden = !PROJECTS.length;
+  $('#plist').innerHTML = PROJECTS.map(p => `<a class="item ${p.id === ROUTE.p ? 'sel' : ''}" href="#p=${p.id}" title="Open this project">
+      ${avatar(p.name)}<span class="im"><span class="n" dir="auto" style="display:block">${esc(p.name)}</span>
+      <span class="s" style="display:block">${p.videos} video${p.videos === 1 ? '' : 's'}</span></span>
+      ${busy[p.id] ? `<span class="live ${busy[p.id] === 'wait' ? 'wait' : ''}" title="${busy[p.id] === 'wait' ? 'Waiting in the work line' : 'BroClips is working on this project'}"></span>` : ''}</a>`).join('')
+    || '<div class="side-empty">No projects yet.<br>Press <b>New project</b> below to start.</div>';
+}
+
+function toggleNew(on) {
+  $('#newbox').hidden = !on; $('#newbtn').hidden = on;
+  if (on) { $('#newname').value = ''; $('#newname').focus(); }
+}
+
+async function createProject() {
+  const name = $('#newname').value.trim();
+  if (!name) { $('#newname').focus(); return; }
+  const r = await api('/api/projects', {name});
+  if (!r.ok) { toast(r.error, true); return; }
+  toggleNew(false);
+  lastPlist = '';
+  location.hash = 'p=' + r.project.id;
+}
+
+async function show() {
+  ROUTE = parseHash();
+  lastPlist = ''; lastVlist = ''; lastVpage = ''; VP = {};
+  loadProjects();
+  if (!ROUTE.p) { formFor = ''; showEmpty(); return; }
+  if (ROUTE.v) { formFor = ''; await videoPage(); return; }
+  await projectPage();
+}
+
+/* ---------- empty states ---------- */
+const HERO_ART = `<svg class="hero-art" viewBox="0 0 480 370" role="img" aria-label="A recording becomes Shorts, a long video and thumbnails">
+  <defs>
+    <linearGradient id="ha-g" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#ff4d8d"/><stop offset=".55" stop-color="#8b5cf6"/><stop offset="1" stop-color="#22d3ee"/></linearGradient>
+    <linearGradient id="ha-s" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#31245e"/><stop offset="1" stop-color="#121628"/></linearGradient>
+    <linearGradient id="ha-p" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#3b1d5e"/><stop offset=".6" stop-color="#1b1f3b"/><stop offset="1" stop-color="#0d2a3a"/></linearGradient>
+    <radialGradient id="ha-b1"><stop offset="0" stop-color="#ff4d8d" stop-opacity=".38"/><stop offset="1" stop-color="#ff4d8d" stop-opacity="0"/></radialGradient>
+    <radialGradient id="ha-b2"><stop offset="0" stop-color="#22d3ee" stop-opacity=".3"/><stop offset="1" stop-color="#22d3ee" stop-opacity="0"/></radialGradient>
+  </defs>
+  <circle cx="130" cy="120" r="130" fill="url(#ha-b1)"/><circle cx="380" cy="250" r="140" fill="url(#ha-b2)"/>
+  <g transform="rotate(-7 150 160)">
+    <rect x="18" y="84" width="258" height="166" rx="18" fill="#141824" stroke="rgba(255,255,255,.14)"/>
+    <rect x="29" y="95" width="236" height="112" rx="10" fill="url(#ha-s)"/>
+    <path d="M29 182 l42-30 30 20 44-38 52 44 30-16 38 26 v19 h-236z" fill="#4b3a8a" opacity=".85"/>
+    <path d="M29 196 l58-22 46 16 50-20 82 26 v11 h-236z" fill="#6a4fb8" opacity=".7"/>
+    <circle cx="222" cy="124" r="13" fill="#fde68a" opacity=".95"/>
+    <circle cx="45" cy="110" r="5" fill="#ef4444"/><text x="56" y="114.5" font-family="Segoe UI,Arial,sans-serif" font-size="12" font-weight="800" fill="#fff" opacity=".9">REC</text>
+    <g fill="#a78bfa">${[8, 16, 11, 22, 14, 26, 18, 9, 20, 13, 24, 10, 17, 7, 19, 12, 23, 15, 8, 18, 11, 21].map((h, i) => `<rect x="${38 + i * 10}" y="${229 - h / 2}" width="5" height="${h}" rx="2.5" opacity="${.45 + (i % 3) * .2}"/>`).join('')}</g>
+  </g>
+  <path d="M232 64 C 262 18, 300 16, 318 40" stroke="url(#ha-g)" stroke-width="3.5" fill="none" stroke-linecap="round" stroke-dasharray="1 9"/>
+  <path d="M311 30 l9 11 -13 3" stroke="#22d3ee" stroke-width="3.5" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
+  <g transform="rotate(6 372 190)">
+    <rect x="296" y="26" width="156" height="312" rx="30" fill="#07080c" stroke="rgba(255,255,255,.2)" stroke-width="2"/>
+    <rect x="304" y="34" width="140" height="296" rx="23" fill="url(#ha-p)"/>
+    <rect x="304" y="120" width="140" height="80" fill="url(#ha-s)"/>
+    <path d="M304 186 l26-18 20 12 28-22 32 26 18-10 16 12 v14 h-140z" fill="#6a4fb8" opacity=".8"/>
+    <rect x="352" y="42" width="44" height="11" rx="5.5" fill="#030406"/>
+    <rect x="318" y="72" width="112" height="13" rx="6.5" fill="#fff"/>
+    <rect x="334" y="91" width="80" height="10" rx="5" fill="#fff" opacity=".65"/>
+    <circle cx="374" cy="160" r="20" fill="rgba(255,255,255,.22)"/><path d="M367 150 l17 10 -17 10z" fill="#fff"/>
+    <rect x="316" y="240" width="38" height="16" rx="5" fill="#fff"/><rect x="358" y="240" width="40" height="16" rx="5" fill="#fde047"/><rect x="402" y="240" width="28" height="16" rx="5" fill="#fff"/>
+    <rect x="330" y="262" width="88" height="12" rx="5" fill="#fff" opacity=".85"/>
+    <rect x="316" y="306" width="116" height="4" rx="2" fill="rgba(255,255,255,.25)"/><rect x="316" y="306" width="70" height="4" rx="2" fill="url(#ha-g)"/>
+  </g>
+  <g transform="rotate(-4 120 300)">
+    <rect x="34" y="258" width="186" height="104" rx="14" fill="#1a1230" stroke="rgba(255,255,255,.16)"/>
+    <rect x="34" y="258" width="186" height="104" rx="14" fill="url(#ha-g)" opacity=".22"/>
+    <text x="50" y="318" font-family="Segoe UI Black,Segoe UI,Arial,sans-serif" font-size="34" font-weight="900" fill="#fde047" stroke="#120a1f" stroke-width="5" paint-order="stroke">WOW!</text>
+    <text x="160" y="330" font-family="Segoe UI Emoji,Apple Color Emoji,sans-serif" font-size="40">😮</text>
+    <path d="M138 286 q14 -14 26 -2" stroke="#ef4444" stroke-width="4" fill="none" stroke-linecap="round"/>
+  </g>
+  <g fill="#fff"><path d="M440 70 l3 9 9 3 -9 3 -3 9 -3 -9 -9 -3 9 -3z" opacity=".9"/><path d="M262 300 l2 6 6 2 -6 2 -2 6 -2 -6 -6 -2 6 -2z" opacity=".7"/>
+    <path d="M40 46 l2.5 7 7 2.5 -7 2.5 -2.5 7 -2.5 -7 -7 -2.5 7 -2.5z" fill="#fde68a"/></g>
+</svg>`;
+
+function showEmpty() {
+  if (PROJECTS.length) {
+    $('#main').innerHTML = `<div class="card glowcard hero-empty">
+      <div><span class="badge b-new nodot">👋 Welcome back</span>
+        <h1 style="margin-top:16px">Pick a project and<br><span class="word">make something fun</span></h1>
+        <p class="lead">Open one of your projects — or start a new one for a different kind of video.</p>
+        <div class="qgrid">${PROJECTS.slice(0, 6).map(p => `<a class="item" href="#p=${p.id}" title="Open this project">${avatar(p.name)}
+          <span class="im"><span class="n" dir="auto" style="display:block">${esc(p.name)}</span>
+          <span class="s" style="display:block">${p.videos} video${p.videos === 1 ? '' : 's'}</span></span>${ic('arrow-right', 'go-arrow')}</a>`).join('')}</div>
+        <div class="row" style="margin-top:20px"><button class="go" onclick="toggleNew(true)" title="Start a new project">${ic('plus')}New project</button>
+          <a class="btn ghost" href="/help.html" title="How BroClips works, step by step">${ic('book-open')}How it works</a></div></div>
+      ${HERO_ART}</div>`;
+    return;
+  }
+  $('#main').innerHTML = `<div class="card glowcard hero-empty">
+      <div><span class="badge b-new nodot">👋 Welcome to BroClips</span>
+        <h1 style="margin-top:16px">Your next viral clip is<br><span class="word">one click away</span></h1>
+        <p class="lead">Add a recording where you talk — a game, a lesson, a tutorial, a podcast. BroClips finds the best
+          moments and makes Shorts with captions, a clean long video, titles and thumbnails.</p>
+        <div class="row"><button class="go big" onclick="toggleNew(true)" title="Start your first project">${ic('plus')}New project</button>
+          <a class="btn big ghost" href="/help.html" title="How BroClips works, step by step">${ic('book-open')}2-minute guide</a></div></div>
+      ${HERO_ART}</div>
+    <div class="steps3">
+      <div class="step3"><span class="n">1</span><div><b>${ic('message-square-text')}Describe your videos</b><p>One sentence: what they are, who watches, where you post.</p></div></div>
+      <div class="step3"><span class="n">2</span><div><b>${ic('upload')}Add a recording</b><p>Pick a video on your PC. It stays where it is — BroClips only reads it.</p></div></div>
+      <div class="step3"><span class="n">3</span><div><b>${ic('sparkles')}Press Make</b><p>Shorts, a long video, titles and thumbnails — ready to upload.</p></div></div>
+    </div>`;
+}
+
+function errorCard(msg, back, label) {
+  return `<div class="card pick-empty"><div class="art">🧭</div><h2>Not here</h2><p>${esc(msg)}</p>
+    <a class="btn" href="${back}">${ic('arrow-left')}${esc(label)}</a></div>`;
+}
+
+/* ---------- the project page ---------- */
+async function projectPage() {
+  const r = await api('/api/projects/' + ROUTE.p);
+  if (!r.ok && r.error) {
+    formFor = '';
+    $('#main').innerHTML = errorCard(r.error, '#', 'Back');
+    return;
+  }
+  P = r.project; VIDEOS = r.videos || [];
+  if (formFor !== P.id) { renderProject(); formFor = P.id; }
+  renderVideos();
+}
+
+function typeTiles() {
+  return TYPES.map(([v]) => {
+    const [icn, name, help] = TYPE_INFO[v];
+    return `<button type="button" class="tile" role="radio" aria-checked="${P.video_type === v}" data-type="${v}" onclick="pickType('${v}')" title="${esc(help)}">
+      <span class="ti">${ic(icn)}</span><span class="tick">${ic('check')}</span><span><b>${esc(name)}</b><small>${esc(help)}</small></span></button>`;
+  }).join('');
+}
+
+function platChips() {
+  return PLATFORMS.map(([v, t]) => {
+    const [icn, name, sub] = PLAT_INFO[v];
+    return `<label class="pchip p-${v}" title="Make things for ${esc(t)}"><input type="checkbox" data-platform="${v}" ${P.platforms.includes(v) ? 'checked' : ''}>
+      <span class="pi">${ic(icn)}</span><span>${esc(name)}${sub ? ` <small>${esc(sub)}</small>` : ''}</span><span class="ck">${ic('check')}</span></label>`;
+  }).join('');
+}
+
+function renderProject() {
+  $('#main').innerHTML = `
+  <div class="ptitle">
+    <input type="text" id="f_name" class="title-input" maxlength="80" dir="auto" value="${esc(P.name)}" aria-label="Project name" title="The project's name — click to change it">
+    <span class="savestate" id="savestate">${ic('check')}Changes are saved by themselves</span>
+    <button class="small danger" onclick="deleteProject(this)" title="Remove this project from BroClips (it goes to the Recycle Bin). Your video files are NOT deleted.">${ic('trash')}Delete project</button>
+  </div>
+  <div class="card glowcard promptcard">
+    <div class="card-h"><span class="ibadge">${ic('message-square-text')}</span>
+      <div class="tx-h"><h3>Describe these videos</h3><div class="sub">The AI reads this before it picks moments and writes titles. Plain words are perfect.</div></div></div>
+    <textarea id="f_prompt" rows="4" dir="auto" placeholder="What are these videos? Who watches them? Which platforms? Which language? What tone?
+Example: Short Python lessons for beginners, in English, for YouTube Shorts and TikTok. Friendly and simple."
+      title="The AI reads this before it picks moments and writes titles">${esc(P.prompt)}</textarea>
+    <div class="chips"><span class="lead">Try an example:</span>${EXAMPLES.map(([icn, label], i) =>
+      `<button type="button" class="chip" onclick="useExample(this,${i})" title="Fill the box with this example (you can change it)">${ic(icn)}${esc(label)}</button>`).join('')}</div>
+  </div>
+  <div class="card">
+    <div class="sec-t">${ic('clapperboard')}What kind of videos? <span class="hint">— decides how the Shorts are framed</span></div>
+    <div class="tilegrid" role="radiogroup" aria-label="Video type">${typeTiles()}</div>
+    <select id="f_video_type" hidden>${opts(TYPES, P.video_type)}</select>
+    <div class="divide"></div>
+    <div class="setgrid">
+      <div><div class="sec-t">${ic('smartphone')}Where will you post?</div><div class="pchips">${platChips()}</div></div>
+      <div><label class="sec-t" for="f_language">${ic('languages')}Language of the videos</label>
+        <select id="f_language" class="wide" title="The language people speak in these videos (titles are written in it too)">${opts(LANGS, P.language)}</select>
+        <div class="hint">Titles and captions use this language.</div></div>
+    </div>
+    <div class="divide"></div>
+    <div class="sec-t">${ic('settings')}Options</div>
+    <div class="opts">
+      <label class="opt" title="Slower, but it picks better moments"><input type="checkbox" class="switch" id="f_marathon" ${P.marathon ? 'checked' : ''}>
+        <span class="ot"><b>🏃 Marathon mode <span class="tag">slower, smarter</span></b>
+          <span class="hint" style="display:block">The AI lists every possible moment, then compares them two at a time, like a tournament.
+          Better moments. With a cloud key it uses many more requests.</span></span></label>
+      <label class="opt" title="Cut long silences out of the long video"><input type="checkbox" class="switch" id="f_jump_cuts" ${P.jump_cuts ? 'checked' : ''}>
+        <span class="ot"><b>${ic('scissors')}Jump cuts</b>
+          <span class="hint" style="display:block">Cuts the long quiet parts out of the long video, so it moves faster.</span></span></label>
+      <div class="opt static" title="The most Shorts BroClips makes from one video">
+        <div class="stepper"><button type="button" onclick="stepShorts(-1)" title="Fewer" aria-label="Fewer Shorts">${ic('minus')}</button>
+          <input type="number" id="f_max_shorts" min="1" max="30" value="${P.max_shorts}" aria-label="Shorts per video">
+          <button type="button" onclick="stepShorts(1)" title="More" aria-label="More Shorts">${ic('plus')}</button></div>
+        <span class="ot"><b>Shorts per video</b><span class="hint" style="display:block">The most Shorts made from one video.</span></span></div>
+    </div>
+    <details><summary>More options <span class="hint">— Shorts layout, silence length</span></summary>
+      <div class="grid2">
+        <label class="field"><span class="lbl">Shorts layout</span>
+          <select id="f_layout" title="How the wide video becomes a tall Short">${opts(LAYOUTS, P.layout)}</select></label>
+        <label class="field"><span class="lbl">Cut silences longer than (seconds)</span>
+          <input type="number" id="f_silence_s" min="0.3" max="10" step="0.1" value="${P.silence_s}" style="width:120px"
+                 title="Jump cuts remove quiet parts longer than this"></label>
+      </div>
+    </details>
+  </div>
+  <div class="card">
+    <div class="card-h"><span class="ibadge cyan">${ic('film')}</span>
+      <div class="tx-h"><h3>Videos <span class="vcount" id="vcount"></span></h3><div class="sub">Your recordings stay where they are — BroClips only reads them.</div></div>
+      <button class="go" onclick="pickVideos(this)" title="Choose video files on this PC. They stay where they are — BroClips only reads them.">${ic('plus')}Add videos</button></div>
+    <details><summary>or paste file paths <span class="hint">(one per line)</span></summary>
+      <textarea id="paths" rows="3" placeholder="D:\\Videos\\lesson 1.mp4
+D:\\Videos\\lesson 2.mp4" title="Full paths of your video files, one per line. Tip: in File Explorer, Shift + right-click a file → Copy as path."></textarea>
+      <div class="row" style="margin-top:8px"><button class="small" onclick="addPasted()" title="Add the files listed above">${ic('plus')}Add these</button>
+        <span class="hint">Tip: in File Explorer, hold Shift, right-click a video → “Copy as path”.</span></div>
+    </details>
+    <div class="msg" id="addmsg"></div>
+    <div id="vlist"></div>
+  </div>`;
+  const main = $('#main');
+  main.querySelectorAll('input,select,textarea').forEach(el => {
+    if (el.id === 'paths') return;
+    el.addEventListener(el.tagName === 'SELECT' || el.type === 'checkbox' ? 'change' : 'input', queueSave);
+  });
+}
+
+function pickType(v) {
+  $('#f_video_type').value = v;
+  document.querySelectorAll('[data-type]').forEach(b => b.setAttribute('aria-checked', String(b.dataset.type === v)));
+  queueSave();
+}
+
+function stepShorts(d) {
+  const i = $('#f_max_shorts');
+  i.value = Math.max(1, Math.min(30, (+i.value || 0) + d));
+  queueSave();
+}
+
+function useExample(btn, i) {
+  const ta = $('#f_prompt'), cur = ta.value.trim();
+  if (cur && !EXAMPLES.some(e => e[2] === cur) && !confirmClick(btn, 'Replace your text? Click again')) return;
+  if (btn.dataset.sure) { delete btn.dataset.sure; btn.innerHTML = btn.dataset.old; btn.classList.remove('sure'); }
+  ta.value = EXAMPLES[i][2];
+  ta.focus();
+  queueSave();
+}
+
+function queueSave() {
+  $('#savestate').innerHTML = `${ic('loader', 'spin')}Saving…`;
+  clearTimeout(saveTimer);
+  saveTimer = setTimeout(saveProject, 600);
+}
+
+async function saveProject() {
+  if (!P) return;
+  const v = id => $('#f_' + id);
+  const fields = {name: v('name').value, prompt: v('prompt').value, video_type: v('video_type').value,
+    language: v('language').value, marathon: v('marathon').checked, jump_cuts: v('jump_cuts').checked,
+    max_shorts: v('max_shorts').value, layout: v('layout').value, silence_s: v('silence_s').value,
+    platforms: [...document.querySelectorAll('[data-platform]')].filter(c => c.checked).map(c => c.dataset.platform)};
+  const r = await api('/api/projects/' + P.id, {fields});
+  if (!r.ok) { $('#savestate').innerHTML = `<span class="err">${ic('triangle-alert')}${esc(r.error)}</span>`; return; }
+  P = r.project;
+  $('#savestate').innerHTML = `<span class="ok">${ic('check')}Saved</span>`;
+  lastPlist = ''; loadProjects();
+}
+
+/* ---------- the videos of a project: cards, updated in place (pictures never blink) ---------- */
+function frameUrl(v) {
+  const d = +v.dur || 10, t = Math.round(Math.max(0.5, Math.min(d * 0.3, d - 1)) * 10) / 10;
+  return `/api/thumbs/tile?project=${encodeURIComponent(v.project)}&video=${encodeURIComponent(v.id)}&t=${t}`;
+}
+
+function frameHtml(v, extra) {
+  const ok = !!v.src_exists;
+  return `<div class="frame ${ok ? 'skel' : 'noimg'}">${ok ? `<img class="ld" src="${frameUrl(v)}" alt="" loading="lazy" onload="imgIn(this)" onerror="imgErr(this)">` : ''}
+    <div class="ph">${ic('film')}</div>${v.dur ? `<span class="dur">${fmtDur(v.dur)}</span>` : ''}${extra || ''}</div>`;
+}
+
+function stepLine(v) {
+  const p = v.progress || {};
+  const label = (p.of === 6 && STEP_SHORT[p.step]) || noEmoji(p.label).replace(/[….\s]+$/, '') || 'Working';
+  return `${p.pct || 0} % · ${label}`;
+}
+
+function vcardKey(v) {
+  return JSON.stringify([v.name, v.src, v.dur, v.status, v.msg, v.src_exists, v.outputs, jobKind(v),
+                         v.progress && v.progress.step, v.job && v.job.position]);
+}
+
+function vcard(v) {
+  const working = v.status === 'working', p = v.progress || {}, o = v.outputs || {};
+  const outs = [o.shorts ? `${ic('smartphone')}${o.shorts} Short${o.shorts === 1 ? '' : 's'}` : '',
+                o.long ? `${ic('film')}Long video` : '', o.thumbs ? `${ic('image')}${o.thumbs} thumbnail${o.thumbs === 1 ? '' : 's'}` : '']
+    .filter(Boolean);
+  const note = v.msg && !working && v.status !== 'done'
+    ? `<div class="note ${v.status === 'failed' ? 'bad' : ''}" title="${esc(v.msg)}">${esc(v.msg)}</div>` : '';
+  return `<div class="vcard" data-id="${v.id}" tabindex="0" onclick="openVideo('${v.id}')"
+      onkeydown="if(event.key==='Enter'&&event.target===this)openVideo('${v.id}')" title="Open this video">
+    ${frameHtml(v, `<span class="st">${statusBadge(v, true)}</span><span class="play">${ic('play')}</span>`)}
+    <div class="vbody">
+      <div class="n" dir="auto">${esc(v.name)}</div>
+      <div class="s" title="${esc(v.src)}">${ic('folder')}<span>${esc(v.src)}</span></div>
+      ${v.src_exists ? '' : '<div><span class="badge b-missing" title="The file was moved, renamed or deleted">File missing</span></div>'}
+      ${working ? `<div class="vprog"><div style="width:${p.pct || 0}%"></div></div><div class="vpct">${esc(stepLine(v))}</div>` : ''}
+      ${outs.length ? `<div class="outs">${outs.map(x => `<span class="ochip">${x}</span>`).join('')}</div>` : ''}
+      ${note}
+      <div class="acts">${actionButtons(v, true)}
+        <button class="small iconbtn danger" onclick="noBubble(event);removeVideo(this,'${v.id}')" aria-label="Remove from project"
+                title="Remove from this project. The video file itself is NOT deleted.">${ic('trash')}</button></div>
+    </div></div>`;
+}
+
+function openVideo(vid) { location.hash = `p=${ROUTE.p}&v=${vid}`; }
+
+function renderVideos() {
+  const key = JSON.stringify(VIDEOS);
+  if (key === lastVlist) return;
+  lastVlist = key;
+  const box = $('#vlist'), vc = $('#vcount');
+  if (!box) return;
+  if (vc) vc.textContent = VIDEOS.length || '';
+  if (!VIDEOS.length) {
+    box.innerHTML = `<div class="dropzone"><div class="big-emo">🎥</div><b>No videos yet</b>
+      <p>Add your recordings — a gaming session, a lesson, a tutorial, a podcast.<br>They stay in their folder: BroClips only reads them.</p>
+      <button class="go" onclick="pickVideos(this)" title="Choose video files on this PC">${ic('plus')}Add videos</button></div>`;
+    return;
+  }
+  let grid = box.querySelector('.vgrid');
+  if (!grid) { box.innerHTML = '<div class="vgrid"></div>'; grid = box.querySelector('.vgrid'); }
+  const ids = VIDEOS.map(v => v.id);
+  grid.querySelectorAll('.vcard').forEach(c => { if (!ids.includes(c.dataset.id)) c.remove(); });
+  VIDEOS.forEach((v, i) => {
+    const k = vcardKey(v);
+    let c = grid.querySelector(`.vcard[data-id="${v.id}"]`);
+    if (!c || c.dataset.k !== k) {
+      const tmp = document.createElement('div');
+      tmp.innerHTML = vcard(v);
+      const n = tmp.firstElementChild;
+      n.dataset.k = k;
+      if (c) {                                   // keep the picture that is already there (no blink)
+        const oldImg = c.querySelector('.frame img'), newImg = n.querySelector('.frame img');
+        if (oldImg && newImg && oldImg.complete && oldImg.classList.contains('in') && oldImg.src === newImg.src) {
+          newImg.replaceWith(oldImg); n.querySelector('.frame').classList.remove('skel');
+        }
+        n.style.animation = 'none';
+        c.replaceWith(n);
+      } else grid.appendChild(n);
+      c = n;
+    }
+    if (grid.children[i] !== c) grid.insertBefore(c, grid.children[i] || null);
+    if (v.status === 'working') {
+      const bar = c.querySelector('.vprog > div'), t = c.querySelector('.vpct');
+      if (bar) bar.style.width = ((v.progress && v.progress.pct) || 0) + '%';
+      if (t) t.textContent = stepLine(v);
+    }
+  });
+}
+
+const PIPE_KINDS = ['make', 'find_again', 'short_edit'];      // the jobs that make videos (thumbnail jobs are others)
+function jobKind(v) { return (v.job && v.job.job && v.job.job.kind) || ''; }
+
+function statusBadge(v, noPct) {
+  const busy = ['working', 'queued', 'waiting'].includes(v.status);
+  if (busy && jobKind(v) && !PIPE_KINDS.includes(jobKind(v)))
+    return `<span class="badge b-${v.status}" title="Working on the thumbnails of this video">Thumbnails…</span>`;
+  const pct = !noPct && v.status === 'working' && v.progress ? ` ${v.progress.pct || 0} %` : '';
+  return `<span class="badge b-${esc(v.status)}" title="${esc(v.msg || '')}">${BADGE[v.status] || esc(v.status)}${pct}</span>`;
+}
+
+function actionButtons(v, small) {
+  const c = small ? 'small ' : '';
+  if (['working', 'queued', 'waiting'].includes(v.status))
+    return `<button class="${c}" onclick="noBubble(event);stopVideo('${v.id}')" title="Stop the work on this video (you can start it again later)">${ic('circle-stop')}Stop</button>`;
+  if (v.status === 'done')
+    return `<button class="${c}" onclick="noBubble(event);make('${v.id}',true)" title="Find new moments and make everything again">${ic('refresh-cw')}Make again</button>`;
+  return `<button class="${c}go" onclick="noBubble(event);make('${v.id}',false)" title="Make Shorts, a long video, titles and thumbnails from this video">${ic('sparkles')}Make</button>`;
+}
+
+async function pickVideos(btn) {
+  btn.disabled = true;
+  const old = btn.innerHTML; btn.innerHTML = ic('loader', 'spin') + 'Choose in the window…';
+  const r = await api('/api/pick_videos', {});
+  btn.disabled = false; btn.innerHTML = old;
+  if (!r.ok) { toast(r.error, true); return; }
+  if (r.paths && r.paths.length) await addPaths(r.paths);
+}
+
+async function addPasted() {
+  const paths = $('#paths').value.split('\n').map(s => s.trim()).filter(Boolean);
+  if (!paths.length) { $('#paths').focus(); return; }
+  if (await addPaths(paths)) $('#paths').value = '';
+}
+
+async function addPaths(paths) {
+  const r = await api(`/api/projects/${P.id}/videos`, {paths});
+  if (!r.ok) { $('#addmsg').textContent = r.error; return false; }
+  const lines = [];
+  if (r.added.length) lines.push(`✅ Added ${r.added.length} video${r.added.length === 1 ? '' : 's'}. They stay in their folder — BroClips only reads them.`);
+  for (const s of r.skipped) lines.push(`⚠️ ${s.path}: ${s.why}`);
+  $('#addmsg').textContent = lines.join('\n');
+  lastPlist = ''; loadProjects();
+  await projectPage();
+  return r.added.length > 0;
+}
+
+async function make(vid, again) {
+  const r = await api(`/api/projects/${ROUTE.p}/videos/${vid}/make`, {again});
+  if (!r.ok) { toast(r.error, true); return; }
+  toast(again ? 'Added to the work line — it will make everything again.' : 'Added to the work line. Watch the progress at the top.');
+  refresh();
+}
+
+async function stopVideo(vid) {
+  const r = await api(`/api/projects/${ROUTE.p}/videos/${vid}/cancel`, {});
+  if (!r.ok) toast(r.error, true);
+  refresh();
+}
+
+async function removeVideo(btn, vid) {
+  if (!confirmClick(btn, 'Remove? Click again')) return;
+  const r = await api(`/api/projects/${ROUTE.p}/videos/${vid}/remove`, {});
+  if (!r.ok) { toast(r.error, true); return; }
+  toast('Removed from this project. Your video file was not touched.');
+  if (ROUTE.v) location.hash = 'p=' + ROUTE.p; else refresh();
+}
+
+async function deleteProject(btn) {
+  if (!confirmClick(btn, 'Sure? Click again to delete')) return;
+  const r = await api(`/api/projects/${P.id}/delete`, {});
+  if (!r.ok) { toast(r.error, true); return; }
+  toast('Project deleted (it is in the Recycle Bin). Your video files were not touched.');
+  formFor = ''; location.hash = '';
+}
+
+/* ---------- the video page: progress, "What the AI is doing", results ---------- */
+const AICON = {step: '▶️', you: '✍️', listen: '👂', clean: '🧹', read: '📖', think: '💭', idea: '💡', drop: '✂️',
+               merge: '🧩', keep: '✅', match: '🥊', rank: '🏆', render: '🎬', text: '📝', done: '✅', warn: '⚠️'};
+const TYPE_ICON = {funny: '😂', story: '📖', reaction: '😮', tip: '💡', explanation: '🧠', highlight: '⭐',
+                   opinion: '🗣️', other: '🎬'};
+const LNAME = {follow: 'follow the action', zoom: 'zoom on the action', fit: 'whole picture'};
+let VP = {};
+
+function fmtT(sec) {
+  sec = Math.max(0, +sec || 0);
+  return `${Math.floor(sec / 60)}:${(sec % 60).toFixed(1).padStart(4, '0')}`;
+}
+
+async function videoPage() {
+  const id = ROUTE.p + '/' + ROUTE.v;
+  const [r, res] = await Promise.all([api(`/api/projects/${ROUTE.p}/videos/${ROUTE.v}`),
+                                      api(`/api/results/${ROUTE.p}/${ROUTE.v}`)]);
+  if (!r.ok && r.error) {
+    if (r.offline) return;
+    VP = {};
+    $('#main').innerHTML = errorCard(r.error, `#p=${esc(ROUTE.p)}`, 'Back to the project');
+    return;
+  }
+  const v = r.video, p = r.project || {};
+  if (VP.id !== id) {
+    VP = {id, keys: {}, editing: null, edit: null, logOpen: false, thumbs: undefined, copy: {}, lastStatus: v.status, tab: ''};
+    $('#main').innerHTML = skeleton(v, p, res.ok ? res : {});
+    loadThumbs();
+  }
+  VP.v = v; VP.p = p;
+  if (res.ok) VP.res = res;
+  part('head', headHtml(v), JSON.stringify([v.name, v.status, v.src, v.dur, v.msg, v.src_exists, jobKind(v)]));
+  part('work', workHtml(v, VP.res), JSON.stringify([v.status, v.progress && v.progress.step, v.progress && v.progress.of,
+    v.job && v.job.position, v.job && v.job.waiting_for, v.job && v.job.stopping, jobKind(v), v.msg, v.src_exists,
+    VP.res && VP.res.marathon]));
+  if (v.status === 'working') updateProgress(v);
+  if (VP.res) {
+    renderLog(v, VP.res.log || []);
+    part('layout', layoutHtml(VP.res), JSON.stringify([VP.res.layout, VP.res.layout_now, (VP.res.shorts || []).length]));
+    renderResults();
+  }
+  if (VP.lastStatus === 'working' && v.status !== 'working') loadThumbs();      // a job just finished
+  VP.lastStatus = v.status;
+}
+
+function part(name, html, key) {
+  if (VP.keys[name] === key) return;
+  VP.keys[name] = key;
+  const el = $('#vp-' + name);
+  if (el) el.innerHTML = html;
+}
+
+function skeleton(v, p, res) {
+  return `<div class="vwrap"><a class="btn backlink" href="#p=${v.project}" title="Back to the project">${ic('arrow-left')}<span dir="auto">${esc(p.name || 'Back')}</span></a>
+  <div id="vp-head"></div><div id="vp-work"></div><div id="vp-log"></div><div id="vp-results"></div>
+  <div class="card wishcard">
+    <div class="card-h"><span class="ibadge amber">${ic('lightbulb')}</span>
+      <div class="tx-h"><h3>Your wishes for this video <span class="hint">(optional)</span></h3><div class="sub">Tell the AI what you want. One wish per line.</div></div></div>
+    <textarea id="wishes" rows="4" dir="auto" title="Tell the AI what you want. One wish per line." placeholder="One wish per line…">${esc(res.wishes || '')}</textarea>
+    <div class="ex"><div><code>5:30 the joke about the bug</code><br>With a time, the AI looks there first.</div>
+      <div><code>pick the moments where I explain loops</code><br>Without a time, it is advice for every choice.</div></div>
+    <div class="row" style="margin-top:14px">
+      <button onclick="saveWishes(this)" title="Save the wishes. They are used the next time BroClips looks for moments.">${ic('save')}Save</button>
+      <button class="go" onclick="findAgain(this)" title="Look for new moments with your wishes and make new Shorts">${ic('refresh-cw')}Find new moments</button></div>
+    <div class="hint" style="margin-top:10px">Find new moments looks for new moments (your wishes first) and makes new Shorts. Shorts you marked
+      Keep stay; the others go to the Recycle Bin when the new ones are ready. The long video stays as it is.</div></div>
+  <div class="card" id="vp-layout"></div></div>`;
+}
+
+function headHtml(v) {
+  return `<div class="vhead">${frameHtml(v)}<div class="vh">
+      <div class="row"><h1 dir="auto">${esc(v.name)}</h1>${statusBadge(v, true)}</div>
+      <div class="meta"><span class="path" title="${esc(v.src)}">${ic('folder')}${esc(v.src)}</span>
+        ${v.dur ? `<span>${ic('clock')}${fmtDur(v.dur)}</span>` : ''}${v.added ? `<span>${ic('calendar')}added ${fmtDate(v.added)}</span>` : ''}</div>
+      <div class="readonly">${ic('shield-check')}BroClips only reads this file. It never changes, moves or deletes it.</div></div></div>`;
+}
+
+function workHtml(v, res) {
+  let h = '';
+  if (!v.src_exists)
+    h += `<div class="note bad" style="margin-top:16px">${ic('triangle-alert')}<div><b>The video file is not there any more.</b><br>
+      Was it moved, renamed or deleted? Remove it from the project and add it again from its new place.</div></div>`;
+  h += `<div class="actbar">${actionButtons(v, false)}
+      <button onclick="openFolder(null,'${v.project}','${v.id}')" title="Open the folder where BroClips puts this video's results">${ic('folder-open')}Open folder</button>
+      <button class="danger" onclick="removeVideo(this,'${v.id}')" title="Remove from this project. The video file itself is NOT deleted.">${ic('trash')}Remove from project</button></div>`;
+  if (v.status === 'working') h += progressCard(v);
+  if (v.status === 'queued' || v.status === 'waiting') {
+    const j = v.job || {};
+    h += `<div class="card"><div class="card-h"><span class="ibadge amber">${ic(j.waiting_for ? 'circle-pause' : 'clock')}</span>
+        <div class="tx-h"><h3>Waiting in line <span class="hint">(number ${j.position || 1})</span></h3>
+        <div class="sub">${j.waiting_for ? `Waiting until ${esc(j.waiting_for)} closes, so it stays smooth. Or start now:` : 'It starts when the work before it is done.'}</div></div></div>
+      <div class="row">${j.waiting_for ? `<button class="go" onclick="runNow()" title="Start now, even though that program is open (it may run slower)">${ic('play')}Run now</button>` : ''}
+      <button onclick="stopVideo('${v.id}')" title="Take it out of the line">${ic('x')}Remove from line</button></div></div>`;
+  }
+  if (v.msg && !['working', 'done'].includes(v.status))
+    h += `<div class="note ${v.status === 'failed' ? 'bad' : ''}" style="margin-bottom:18px">${ic(v.status === 'failed' ? 'triangle-alert' : 'info')}<div style="white-space:pre-wrap">${esc(v.msg)}</div></div>`;
+  const m = res && res.marathon;
+  if (m && m.on && m.questions && v.status !== 'working')
+    h += `<div class="note info marathon-note">${ic('info')}<div>🏃 Marathon mode is on for this project: about <b>${m.questions}</b> AI questions for this video${m.cloud
+      ? ` — with your cloud AI key that is about <b>${m.questions} requests</b> (it can cost money or use up a free daily limit).`
+      : ' (free on this PC — it just takes longer).'}</div></div>`;
+  return h;
+}
+
+function funCaption(p) {
+  if ((p.of || 6) !== STEPS.length) return noEmoji(p.label) || 'Working on it…';
+  const k = (p.step || 1) - 1;
+  if (k === 5 && /thumb/i.test(p.detail || '')) return 'Designing thumbnails…';
+  return STEP_FUN[k] || 'Working on it…';
+}
+
+function progressCard(v) {
+  const p = v.progress || {}, step = p.step || 1, pct = p.pct || 0, stopping = v.job && v.job.stopping;
+  const right = (p.of || 6) === STEPS.length
+    ? `<ol class="vsteps">${STEPS.map((s, k) => {
+        const n = k + 1, cls = n < step ? 'd' : (n === step ? 'c' : '');
+        return `<li class="${cls}"><span class="dotc">${n < step ? ic('check') : n}</span><span class="stxt"><b>${esc(s)}</b>${n === step ? '<small>now</small>' : ''}</span></li>`;
+      }).join('')}</ol>`
+    : `<div class="note info">${ic('info')}<div>${esc(noEmoji(p.label) || 'Working')}</div></div>`;
+  return `<div class="card glowcard"><div class="workcard"><div>
+      <div class="bigpct" id="pg-pct">${pct}<small>%</small></div>
+      <div class="caption" id="pg-cap">${esc(stopping ? 'Stopping…' : funCaption(p))}</div>
+      <div class="pdetail" id="pg-detail">${esc(p.detail || '')}</div>
+      <div class="pbar"><div id="pg-bar" style="width:${pct}%"></div></div>
+      <div class="foot"><button onclick="stopVideo('${v.id}')" title="Stop the work on this video (you can start it again later — it continues where it stopped)">${ic('circle-stop')}Stop</button>
+        <span class="hint" style="flex:1;min-width:220px">You can close this window: BroClips keeps working. Open it again with the Desktop shortcut.</span></div>
+    </div>${right}</div></div>`;
+}
+
+function updateProgress(v) {
+  const p = v.progress || {}, pct = p.pct || 0;
+  const pe = $('#pg-pct'), bar = $('#pg-bar'), cap = $('#pg-cap'), det = $('#pg-detail');
+  if (pe && pe.firstChild && pe.firstChild.nodeValue !== String(pct)) pe.firstChild.nodeValue = String(pct);
+  if (bar) bar.style.width = pct + '%';
+  const c = (v.job && v.job.stopping) ? 'Stopping…' : funCaption(p);
+  if (cap && cap.textContent !== c) cap.textContent = c;
+  if (det && det.textContent !== (p.detail || '')) det.textContent = p.detail || '';
+}
+
+function renderLog(v, log) {
+  const working = v.status === 'working' && PIPE_KINDS.includes(jobKind(v));
+  const key = JSON.stringify([log.length, log.length ? log[log.length - 1] : null, working]);
+  if (VP.keys.log === key) return;
+  VP.keys.log = key;
+  const el = $('#vp-log');
+  if (!log.length) { el.innerHTML = ''; return; }
+  const old = el.querySelector('.blog');
+  const atBottom = !old || old.scrollHeight - old.scrollTop - old.clientHeight < 40, top = old ? old.scrollTop : 0;
+  const lines = log.map(e => `<div class="bl k-${esc(e.k)}"><span class="ck">${esc(e.clock || '')}</span>${AICON[e.k] || '•'} ${e.at ? `<span class="at">${esc(e.at)}</span> ` : ''}${e.title ? `<bdi class="tt">«${esc(e.title)}»</bdi> ` : ''}<span dir="auto">${esc(e.text)}</span></div>`).join('');
+  const bar = t => `<span class="dots" aria-hidden="true"><i></i><i></i><i></i></span><span class="tt">${ic('brain')}${t}</span>`;
+  el.innerHTML = working
+    ? `<div class="term"><div class="term-bar">${bar('What the AI is doing')}<span class="live">Live</span><span class="n">${log.length} notes</span></div>
+        <div class="blog">${lines}<div class="bl"><span class="cursor"></span></div></div></div>`
+    : `<details class="term" ${VP.logOpen ? 'open' : ''} ontoggle="VP.logOpen=this.open"><summary class="term-bar">${bar('What the AI thought')}<span class="n">${log.length} notes</span></summary>
+        <div class="blog">${lines}</div></details>`;
+  const box = el.querySelector('.blog');
+  if (box) box.scrollTop = atBottom ? box.scrollHeight : top;
+}
+
+/* results: never redrawn while a video plays or something is typed there (it would restart / lose it) */
+function renderResults(force) {
+  const res = VP.res, box = $('#vp-results');
+  if (!res || !box) return;
+  const v = VP.v || {};
+  const key = JSON.stringify([res.shorts, res.long, res.texts, VP.editing, VP.thumbs, (VP.p || {}).platforms, v.status, v.msg]);
+  if (!force && VP.keys.results === key) return;
+  if ([...box.querySelectorAll('video')].some(x => !x.paused && !x.ended)) return;
+  const a = document.activeElement;
+  if (!force && a && box.contains(a) && /INPUT|TEXTAREA|SELECT/.test(a.tagName)) return;
+  VP.keys.results = key;
+  VP.copy = {};
+  box.innerHTML = bannerHtml(res) + shortsHtml(res) + longHtml(res) + thumbsHtml() + textsHtml(res);
+  if (v.status === 'done' && ((res.shorts || []).length || res.long)) celebrate(VP.id);
+}
+
+function celebrate(id) {
+  let seen = [];
+  try { seen = JSON.parse(localStorage.getItem('broclips_celebrated') || '[]'); } catch (e) { seen = []; }
+  if (!Array.isArray(seen) || seen.includes(id)) return;
+  seen.push(id);
+  try { localStorage.setItem('broclips_celebrated', JSON.stringify(seen.slice(-300))); } catch (e) { return; }
+  setTimeout(confetti, 300);
+}
+
+function bannerHtml(res) {
+  const v = VP.v || {}, S = res.shorts || [], L = res.long, T = VP.thumbs;
+  if (!S.length && !L) return '';
+  const kept = S.filter(s => s.mark === 'keep').length, done = v.status === 'done';
+  const share = L && L.src_dur ? Math.round(L.dur / L.src_dur * 100) : 0, ch = L ? (L.chapters || []).length : 0;
+  const msg = done && v.msg ? noEmoji(v.msg) : '';
+  return `<div class="card glowcard banner">
+    <div class="card-h"><span class="ibadge">${ic('sparkles')}</span>
+      <div class="tx-h"><h2>${done ? 'Your clips are ready! 🎉' : 'Made so far'}</h2>
+        <div class="sub">${esc(msg || 'Keep the good Shorts, fix small things, then upload.')}</div></div></div>
+    <div class="stats">
+      <div class="stat"><div class="l">${ic('smartphone')}Shorts made</div><div class="v">${S.length}</div>
+        <div class="x ${kept ? 'ok' : ''}">${kept ? `${kept} kept` : 'keep the good ones'}</div></div>
+      <div class="stat"><div class="l">${ic('film')}Long video</div><div class="v">${L ? fmtDur(L.dur) : '—'}</div>
+        <div class="x">${L ? (L.jump_cuts ? `${share} % of ${fmtDur(L.src_dur)} kept` : 'jump cuts are off') : 'not made yet'}</div></div>
+      <div class="stat"><div class="l">${ic('list-checks')}Chapters</div><div class="v">${L ? ch : '—'}</div>
+        <div class="x">${ch >= 3 ? 'ready for YouTube' : (ch ? 'YouTube needs 3 or more' : 'none this time')}</div></div>
+      <div class="stat"><div class="l">${ic('image')}Thumbnails</div><div class="v">${Array.isArray(T) ? T.length : '—'}</div>
+        <div class="x">${Array.isArray(T) && T.length ? 'change them in the studio' : 'make some in the studio'}</div></div>
+    </div></div>`;
+}
+
+function shortsHtml(res) {
+  const list = res.shorts || [];
+  if (!list.length)
+    return VP.v && VP.v.status === 'done' && res.stages && res.stages.shorts
+      ? `<div class="card pick-empty"><div class="art">🤷</div><h2>No Shorts this time</h2>
+          <p>Write a wish below (for example a time you remember) and press Find new moments.</p></div>` : '';
+  const kept = list.filter(s => s.mark === 'keep').length;
+  return `<div class="card"><div class="card-h"><span class="ibadge pink">${ic('smartphone')}</span>
+      <div class="tx-h"><h3>Shorts <span class="vcount">${list.length}</span></h3><div class="sub">Keep the good ones, skip the others, fix small things.</div></div>
+      ${kept ? `<span class="badge b-done">${kept} kept</span>` : ''}</div>
+    <div class="vp-grid">${list.map(shortCard).join('')}</div></div>`;
+}
+
+function shortCard(s) {
+  const busy = s.dirty || !s.file;
+  const place = s.marathon && s.marathon.of ? `${ic('trophy')}place ${s.marathon.rank} · won ${s.marathon.won} of ${s.marathon.of}`
+    : (s.score ? `${ic('star')}${s.score}/10` : '');
+  const tags = [`${ic('timer')}${fmtDur(s.dur || 0)}`, `${ic('clock')}from ${esc(s.at || '')}`,
+                s.type ? `${TYPE_ICON[s.type] || '🎬'} ${esc(s.type)}` : ''].filter(Boolean);
+  return `<div class="short ${s.mark === 'skip' ? 'skipped' : ''} ${s.mark === 'keep' ? 'kept' : ''}" id="short-${s.n}">
+    <div class="phone">
+      <span class="rank ${s.n === 1 ? 'gold' : ''}" title="Short number ${s.n}">${s.n === 1 ? ic('trophy') : ''}#${s.n}</span>
+      ${s.mark === 'keep' ? `<span class="keptflag" title="You keep this one">${ic('check')}</span>` : ''}
+      ${busy ? `<div class="busy">${ic('loader', 'spin')}<b>Being made again…</b><span class="hint">It shows here when it is ready.</span></div>`
+             : `<video controls preload="metadata" src="${esc(s.file)}" title="Short ${s.n} — play it here"></video>`}
+    </div>
+    <div class="sinfo">
+      <div class="t" dir="auto">${esc(s.title || s.hook || 'Short')}</div>
+      ${s.hook ? `<div class="hook" title="The title shown on top of the Short">${ic('type')}<span><span class="lab">On top:</span> <bdi dir="auto">${esc(s.hook)}</bdi></span></div>` : ''}
+      <div class="tags">${tags.map(t => `<span class="tag">${t}</span>`).join('')}${place ? `<span class="tag hot">${place}</span>` : ''}</div>
+      ${s.why ? `<div class="why" dir="auto" title="Why the AI picked it">${esc(s.why)}</div>` : ''}
+      <div class="kbar">
+        <button class="small tg keep" aria-pressed="${s.mark === 'keep'}" onclick="markShort(${s.n},'keep')" title="A good one: keep it. Kept Shorts are never replaced by Find new moments.">${ic('check')}Keep</button>
+        <button class="small tg skip" aria-pressed="${s.mark === 'skip'}" onclick="markShort(${s.n},'skip')" title="Not good: mark it as skipped (it stays until you delete it)">${ic('x')}Skip</button>
+        <button class="small iconbtn" onclick="editShort(${s.n})" ${busy ? 'disabled' : ''} aria-label="Edit this Short" title="Change the start or end, the title on top, or a wrong caption word">${ic('pencil')}</button>
+        <button class="small iconbtn danger" onclick="deleteShort(this,${s.n})" aria-label="Delete this Short" title="Delete this Short (it goes to the Recycle Bin)">${ic('trash')}</button>
+      </div>
+      ${VP.editing === s.n && VP.edit ? `<div class="edit">${editHtml(s)}</div>` : ''}
+    </div></div>`;
+}
+
+async function markShort(n, mark) {
+  const s = (VP.res.shorts || []).find(x => x.n === n);
+  const next = s && s.mark === mark ? '' : mark;
+  const r = await api(`/api/results/${ROUTE.p}/${ROUTE.v}/mark`, {n, mark: next});
+  if (!r.ok) { toast(r.error, true); return; }
+  if (s) s.mark = r.mark;
+  const card = $('#short-' + n), vid = card && card.querySelector('video');
+  if (card && s && !(vid && !vid.paused)) card.outerHTML = shortCard(s);
+  else if (card) { card.classList.toggle('kept', r.mark === 'keep'); card.classList.toggle('skipped', r.mark === 'skip'); }
+  VP.keys.results = '';
+}
+
+async function deleteShort(btn, n) {
+  if (!confirmClick(btn, 'Sure?')) return;
+  const r = await api(`/api/results/${ROUTE.p}/${ROUTE.v}/delete`, {n});
+  if (!r.ok) { toast(r.error, true); return; }
+  toast(r.msg || 'Deleted (it is in the Recycle Bin).');
+  const card = $('#short-' + n);
+  if (card) card.remove();
+  VP.keys.results = '';
+  refresh();
+}
+
+function editShort(n) {
+  const s = (VP.res.shorts || []).find(x => x.n === n);
+  if (!s || VP.editing === n) { VP.editing = null; VP.edit = null; renderResults(true); return; }
+  VP.editing = n;
+  VP.edit = {n, s0: s.s, e0: s.e, start: s.s, end: s.e, dur0: s.dur || (s.e - s.s)};
+  renderResults(true);
+}
+
+function nudge(which, d) {
+  return `<button class="small" onclick="nudgeEdit('${which}',${d})" title="${d < 0 ? 'Earlier' : 'Later'} by ${Math.abs(d)} s">${d < 0 ? '−' : '+'}${Math.abs(d)} s</button>`;
+}
+
+function editLen(e) { return e.dur0 + (e.s0 - e.start) + (e.end - e.e0); }
+
+function editHtml(s) {
+  const e = VP.edit;
+  return `<div class="hint" style="margin:0">Change what you want, then press Save. Only this Short is made again.</div>
+    <div class="nudge"><b>Start</b>${nudge('start', -1)}${nudge('start', -0.2)}<span class="mono" id="ed-start">${fmtT(e.start)}</span>${nudge('start', 0.2)}${nudge('start', 1)}</div>
+    <div class="nudge"><b>End</b>${nudge('end', -1)}${nudge('end', -0.2)}<span class="mono" id="ed-end">${fmtT(e.end)}</span>${nudge('end', 0.2)}${nudge('end', 1)}</div>
+    <div class="hint" id="ed-len" style="margin:0">Length: ${fmtT(editLen(e))} (times are in the original video)</div>
+    <label class="field" style="margin:2px 0"><span class="lbl">Title on top</span>
+      <input type="text" id="ed-hook" maxlength="120" dir="auto" value="${esc(s.hook || '')}" title="The text shown on top of the Short"></label>
+    ${(s.phrases || []).length ? `<div class="lbl">Captions <span class="hint">(fix a wrong word; empty = no caption there)</span></div>
+    <div class="caps">${s.phrases.map((p, i) => `<div class="cap"><span>${fmtT(p.t)}</span><input type="text" data-cap="${i}" dir="auto" value="${esc(p.text)}" title="The caption at ${fmtT(p.t)} in the Short"></div>`).join('')}</div>` : ''}
+    <div class="row"><button class="go small" onclick="saveEdit()" title="Save and make this Short again">${ic('save')}Save and make it again</button>
+      <button class="small ghost" onclick="editShort(${s.n})" title="Close without changing anything">Cancel</button></div>`;
+}
+
+function nudgeEdit(which, d) {
+  const e = VP.edit;
+  if (!e) return;
+  e[which] = Math.max(0, Math.round((e[which] + d) * 10) / 10);
+  $('#ed-' + which).textContent = fmtT(e[which]);
+  $('#ed-len').textContent = `Length: ${fmtT(editLen(e))} (times are in the original video)`;
+}
+
+async function saveEdit() {
+  const e = VP.edit;
+  if (!e) return;
+  const body = {n: e.n, hook: $('#ed-hook').value,
+                captions: [...document.querySelectorAll('[data-cap]')].map(i => ({i: +i.dataset.cap, text: i.value}))};
+  if (Math.abs(e.start - e.s0) > 0.01) body.start = e.start;
+  if (Math.abs(e.end - e.e0) > 0.01) body.end = e.end;
+  const r = await api(`/api/results/${ROUTE.p}/${ROUTE.v}/edit`, body);
+  if (!r.ok) { toast(r.error, true); return; }
+  toast(r.job ? 'Saved — this Short is being made again. Watch the line at the top.' : (r.msg || 'Nothing was changed.'));
+  VP.editing = null; VP.edit = null; VP.keys.results = '';
+  refresh();
+}
+
+function longHtml(res) {
+  const L = res.long;
+  if (!L) return '';
+  const cut = L.jump_cuts ? `${fmtDur(L.cut_s || 0)} of silence was cut out` : 'jump cuts are off';
+  const ch = L.chapters || [];
+  return `<div class="card longv"><div class="card-h"><span class="ibadge red">${ic('youtube')}</span>
+      <div class="tx-h"><h3>The long video <span class="hint">(YouTube)</span></h3><div class="sub">${fmtDur(L.dur)} long — the recording is ${fmtDur(L.src_dur)}; ${cut}.</div></div></div>
+    <div class="longgrid"><video id="longvid" controls preload="metadata" src="${esc(L.file)}" title="The whole video with the long silences cut out"></video>
+      ${ch.length ? `<div class="chlist"><div class="lead">Chapters · click to jump</div>${ch.map(c => `<button class="chrow" onclick="seekLong(${c.t})" title="Jump to this chapter"><span class="ct">${fmtDur(c.t)}</span><bdi dir="auto">${esc(c.name)}</bdi><span class="play">${ic('circle-play')}</span></button>`).join('')}</div>`
+        : `<div class="note">${ic('info')}<div>No chapters this time — YouTube needs at least 3.</div></div>`}
+    </div></div>`;
+}
+
+function seekLong(t) {
+  const v = $('#longvid');
+  if (v) { v.currentTime = t; v.play(); }
+}
+
+async function loadThumbs() {
+  const id = VP.id;
+  try {
+    const r = await fetch(`/api/thumbs/list?project=${encodeURIComponent(ROUTE.p)}&video=${encodeURIComponent(ROUTE.v)}`);
+    if (VP.id !== id) return;
+    if (r.status === 404) VP.thumbs = null;                 // the thumbnail part is not in this version
+    else { const j = await r.json(); VP.thumbs = j.thumbs || []; }
+  } catch (e) { return; }
+  renderResults();
+}
+
+function thumbsHtml() {
+  if (VP.thumbs === undefined) return '';
+  if (VP.thumbs === null) return `<div class="card"><h3>Thumbnails</h3><div class="hint">Thumbnails: coming soon.</div></div>`;
+  const q = `project=${encodeURIComponent(ROUTE.p)}&video=${encodeURIComponent(ROUTE.v)}`, list = VP.thumbs;
+  return `<div class="card"><div class="card-h"><span class="ibadge violet">${ic('image')}</span>
+      <div class="tx-h"><h3>Thumbnails <span class="vcount">${list.length || ''}</span></h3><div class="sub">1280 × 720, ready to upload. Click one to change it.</div></div>
+      <a class="btn small" href="/studio.html?${q}&n=new" title="Make a new thumbnail in the studio">${ic('plus')}New</a></div>
+    <div class="studio-cta"><span class="ibadge">${ic('palette')}</span>
+      <div class="tx-h"><b>Thumbnail studio</b><p>Change words, fonts, colours, 3D emoji, arrows and cut-outs with clicks — or ask the AI for more.</p></div>
+      <a class="btn go" href="/studio.html?${q}" title="Open the Thumbnail studio: change thumbnails with clicks, get random ones, or ask the AI">${ic('wand')}Open Thumbnail studio</a></div>
+    ${list.length ? `<div class="thumbs">${list.map(t => `<a class="th skel" href="/studio.html?${q}&n=${t.n}" title="Change thumbnail ${t.n} in the studio">
+        <img class="ld" src="/files/${ROUTE.p}/${ROUTE.v}/${esc(t.file)}?v=${t.v}" alt="Thumbnail ${t.n}" loading="lazy" onload="imgIn(this)" onerror="imgErr(this)">
+        <span class="num">#${t.n}</span><span class="ov"><span class="btn small">${ic('pencil')}Change</span></span></a>`).join('')}</div>`
+      : `<div class="dropzone" style="margin-top:0"><div class="big-emo">🖼️</div><b>No thumbnails yet</b><p>They are made at the end of Make — or press New.</p></div>`}</div>`;
+}
+
+function cp(text) {
+  const k = 'c' + Object.keys(VP.copy).length;
+  VP.copy[k] = text;
+  return `<button class="small" onclick="copyText(this,'${k}')" title="Copy this text, then paste it where you upload">${ic('copy')}Copy</button>`;
+}
+
+function txRow(text, label) {
+  if (!text) return '';
+  return `<div class="tx"><span class="lab">${esc(label)}</span><div class="txt" dir="auto">${esc(text)}</div>${cp(text)}</div>`;
+}
+
+function textsHtml(res) {
+  const T = res.texts;
+  if (!T) return '';
+  const plats = (VP.p && VP.p.platforms) || [], any = !plats.length, tabs = [];
+  const L = T.long;
+  if (L && L.has_video !== false && (any || plats.includes('youtube')))
+    tabs.push(['youtube', 'YouTube', 'youtube', (L.titles || []).map((t, i) => txRow(t, 'Title ' + (i + 1))).join('') +
+               txRow((L.copy && L.copy.description) || L.description, 'Description')]);
+  const per = fn => (res.shorts || []).map(s => {
+    const t = (T.shorts || {})[String(s.n)];
+    if (!t) return '';
+    const inner = fn(t.copy || {});
+    return inner ? `<div class="tx-sec"><div class="sh"><span class="rk">#${s.n}</span><bdi dir="auto">${esc(t.title)}</bdi></div>${inner}</div>` : '';
+  }).join('');
+  let h;
+  if ((any || plats.includes('shorts')) && (h = per(c => c.shorts ? txRow(c.shorts.title, 'Title') + txRow(c.shorts.description, 'Description') : '')))
+    tabs.push(['shorts', 'YouTube Shorts', 'shorts', h]);
+  if ((any || plats.includes('tiktok')) && (h = per(c => txRow(c.tiktok, 'Caption')))) tabs.push(['tiktok', 'TikTok', 'music', h]);
+  if (plats.includes('reels') && (h = per(c => txRow(c.reels, 'Caption')))) tabs.push(['reels', 'Instagram Reels', 'instagram', h]);
+  if (!tabs.length) return '';
+  if (!tabs.some(t => t[0] === VP.tab)) VP.tab = tabs[0][0];
+  return `<div class="card"><div class="card-h"><span class="ibadge green">${ic('file-text')}</span>
+      <div class="tx-h"><h3>Titles and texts</h3><div class="sub">Copy them when you upload. They are written in the language of the video.</div></div></div>
+    <div class="ptabs" role="tablist" aria-label="Platform">${tabs.map(([k, name, icn]) =>
+      `<button class="ptab" role="tab" aria-selected="${k === VP.tab}" data-tab="${k}" onclick="showTab('${k}')" title="Texts for ${esc(name)}">${ic(icn)}${esc(name)}</button>`).join('')}</div>
+    ${tabs.map(([k, , , body]) => `<div role="tabpanel" data-panel="${k}" ${k === VP.tab ? '' : 'hidden'}>${body}</div>`).join('')}</div>`;
+}
+
+function showTab(k) {
+  VP.tab = k;
+  document.querySelectorAll('[data-tab]').forEach(b => b.setAttribute('aria-selected', String(b.dataset.tab === k)));
+  document.querySelectorAll('[data-panel]').forEach(p => { p.hidden = p.dataset.panel !== k; });
+}
+
+async function copyText(btn, k) {
+  const text = VP.copy[k] || '';
+  let ok = false;
+  try { await navigator.clipboard.writeText(text); ok = true; } catch (e) {
+    const ta = document.createElement('textarea');
+    ta.value = text; document.body.appendChild(ta); ta.select();
+    try { ok = document.execCommand('copy'); } catch (e2) { ok = false; }
+    ta.remove();
+  }
+  const old = btn.innerHTML;
+  btn.innerHTML = ok ? ic('check') + 'Copied!' : ic('triangle-alert') + 'Could not copy';
+  btn.classList.toggle('copied', ok);
+  if (ok) toast('Copied! Paste it where you upload.');
+  setTimeout(() => { btn.innerHTML = old; btn.classList.remove('copied'); }, 1600);
+}
+
+const DIAG = {
+  auto: `<svg class="diag" viewBox="0 0 64 64" aria-hidden="true"><circle cx="32" cy="32" r="22" fill="rgba(139,92,246,.16)" stroke="rgba(167,139,250,.55)" stroke-width="1.5"/><g transform="translate(20 20)" fill="none" stroke="#e9e3ff" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">${ICONS.sparkles}</g></svg>`,
+  follow: `<svg class="diag" viewBox="0 0 64 64" aria-hidden="true"><rect x="3" y="16" width="58" height="32.6" rx="4" fill="rgba(255,255,255,.05)" stroke="rgba(255,255,255,.3)" stroke-width="1.5"/><rect x="34" y="16" width="18.4" height="32.6" rx="3" fill="rgba(139,92,246,.3)" stroke="#a78bfa" stroke-width="2"/><circle cx="43" cy="32" r="3.5" fill="#ff4d8d"/><path d="M22 56h18M26 53l-4 3 4 3M36 53l4 3-4 3" fill="none" stroke="rgba(255,255,255,.45)" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>`,
+  zoom: `<svg class="diag" viewBox="0 0 64 64" aria-hidden="true"><rect x="20" y="3" width="24" height="58" rx="4" fill="rgba(255,255,255,.06)" stroke="rgba(255,255,255,.3)" stroke-width="1.5"/><path d="M25 10h14M25 14h9M25 50h14M25 54h9" stroke="rgba(255,255,255,.2)" stroke-width="2" stroke-linecap="round"/><rect x="20" y="19" width="24" height="26" fill="rgba(139,92,246,.3)" stroke="#a78bfa" stroke-width="2"/><circle cx="32" cy="32" r="5" fill="#ff4d8d"/></svg>`,
+  fit: `<svg class="diag" viewBox="0 0 64 64" aria-hidden="true"><rect x="20" y="3" width="24" height="58" rx="4" fill="rgba(255,255,255,.06)" stroke="rgba(255,255,255,.3)" stroke-width="1.5"/><path d="M25 14h14" stroke="#fff" stroke-width="2.6" stroke-linecap="round"/><rect x="20" y="25.2" width="24" height="13.5" fill="rgba(34,211,238,.28)" stroke="#22d3ee" stroke-width="1.6"/><path d="M27 48h10" stroke="#fde047" stroke-width="2.6" stroke-linecap="round"/></svg>`};
+
+function layoutHtml(res) {
+  const cur = res.layout || 'auto';
+  const items = [['auto', 'Same as the project', LNAME[res.layout ? '' : res.layout_now] || 'best for the video type'],
+                 ['follow', 'Follow the action', 'a tall window follows the action'],
+                 ['zoom', 'Zoom on the action', 'bigger, over a blurred copy'],
+                 ['fit', 'Whole picture', 'nothing cut off — best for lessons']];
+  return `<div class="card-h"><span class="ibadge">${ic('smartphone')}</span>
+      <div class="tx-h"><h3>Shorts layout for this video</h3><div class="sub">How the wide video becomes a tall Short. A change is used the next time Shorts are made.</div></div>
+      <button onclick="saveLayout(true)" ${(res.shorts || []).length ? '' : 'disabled'} title="Make every Short of this video again with this layout">${ic('refresh-cw')}Make all Shorts again with it</button></div>
+    <div class="lt" role="radiogroup" aria-label="Shorts layout">${items.map(([k, name, sub]) =>
+      `<button type="button" class="tile" role="radio" aria-checked="${k === cur}" onclick="pickLayout('${k}')" title="${esc(name)} — ${esc(sub)}">${DIAG[k]}<span class="tick">${ic('check')}</span><span><b>${esc(name)}</b><small>${esc(sub)}</small></span></button>`).join('')}</div>
+    <select id="vlayout" hidden>${opts(items.map(([k, n]) => [k, n]), cur)}</select>`;
+}
+
+function pickLayout(k) {
+  $('#vlayout').value = k;
+  saveLayout(false);
+}
+
+async function saveLayout(remake) {
+  const r = await api(`/api/results/${ROUTE.p}/${ROUTE.v}/layout`, {layout: $('#vlayout').value, remake});
+  if (!r.ok) { toast(r.error, true); return; }
+  toast(remake ? (r.job ? 'The Shorts are being made again with this layout.' : (r.msg || 'Saved.'))
+               : 'Saved. It is used the next time Shorts are made (or press Make all Shorts again).');
+  VP.keys.layout = '';
+  refresh();
+}
+
+async function saveWishes(btn) {
+  const r = await api(`/api/results/${ROUTE.p}/${ROUTE.v}/wishes`, {text: $('#wishes').value});
+  if (!r.ok) { toast(r.error, true); return; }
+  toast('Saved. They are used the next time BroClips looks for moments.');
+}
+
+async function findAgain(btn) {
+  const r = await api(`/api/results/${ROUTE.p}/${ROUTE.v}/find_again`, {text: $('#wishes').value});
+  if (!r.ok) { toast(r.error, true); return; }
+  toast('Added to the work line: new moments with your wishes. Watch the progress at the top.');
+  refresh();
+}
+
+async function refresh() {
+  if (!ROUTE.p) { loadProjects(); return; }
+  if (ROUTE.v) { await videoPage(); return; }
+  const r = await api('/api/projects/' + ROUTE.p);
+  if (!r.ok && r.error) { if (!r.offline) { location.hash = ''; } return; }
+  VIDEOS = r.videos || [];
+  renderVideos();
+}
+
+window.onState = () => { refresh(); loadProjects(); };
+init();
+</script>
+</body>
+</html>

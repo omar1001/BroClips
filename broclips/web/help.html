@@ -1,0 +1,167 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>BroClips — Help</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="color-scheme" content="dark">
+<link rel="icon" href="/broclips.png">
+<link rel="stylesheet" href="/app.css">
+</head>
+<body>
+<header class="topbar">
+  <a class="brand" href="/" title="Back to your projects"><img src="/broclips.png" alt=""><span class="word">BroClips</span></a>
+  <div class="status" id="statuspill" title="The work line: BroClips does one job at a time, in this order"><span class="dot"></span><span id="work">Connecting…</span></div>
+  <button id="runnow" class="primary small" hidden onclick="runNow()" title="Start the waiting work now, even though that program is open (it may run slower)"><i data-i="play"></i>Run now</button>
+  <div class="grow"></div>
+  <nav class="seg" aria-label="Pages">
+    <a href="/" title="Back to your projects"><i data-i="clapperboard"></i><span>Projects</span></a>
+    <a href="/settings.html" title="Choose your AI, folders and other settings"><i data-i="settings"></i><span>Settings</span></a>
+    <a href="/help.html" title="How BroClips works, step by step"><i data-i="circle-help"></i><span>Help</span></a>
+  </nav>
+</header>
+<main class="page help">
+ <div class="doc">
+  <nav class="toc" aria-label="On this page">
+    <div class="lead">On this page</div>
+    <a href="#what"><i data-i="clapperboard"></i>What BroClips does</a>
+    <a href="#start"><i data-i="rocket"></i>First steps</a>
+    <a href="#make"><i data-i="sparkles"></i>How to make clips</a>
+    <a href="#line"><i data-i="list-checks"></i>The work line</a>
+    <a href="#files"><i data-i="folder-open"></i>Where are my files?</a>
+    <a href="#faq"><i data-i="message-square-text"></i>Questions</a>
+    <a href="#close"><i data-i="power"></i>Closing BroClips</a>
+    <a href="#about"><i data-i="info"></i>About</a>
+  </nav>
+  <div>
+  <div class="pagehead"><div><h1>Help</h1><p>Everything a new user needs — about 2 minutes to read.</p></div></div>
+
+  <div class="card glowcard" id="what"><div class="card-h"><span class="ibadge"><i data-i="clapperboard"></i></span><h3>What BroClips does</h3></div>
+    <p>You record a video where someone talks — a game with your commentary, a lesson, a programming tutorial, a podcast.
+      <b>BroClips edits it for you:</b></p>
+    <div class="stepcards">
+      <div class="stepcard"><span class="num"><i data-i="smartphone"></i></span><b>Shorts</b><p>For YouTube Shorts, TikTok and Reels: the best moments, standing up (9:16), with big captions word by word.</p></div>
+      <div class="stepcard"><span class="num"><i data-i="film"></i></span><b>A clean long video</b><p>For YouTube: the whole recording with the long silences cut out (“jump cuts”).</p></div>
+      <div class="stepcard"><span class="num"><i data-i="image"></i></span><b>Titles and thumbnails</b><p>Titles, descriptions and hashtags in your language, and thumbnails you can change with clicks.</p></div>
+    </div>
+    <div class="note good" style="margin-top:14px"><i data-i="shield-check"></i><div>Your video files are <b>only read</b>. BroClips never changes, moves or deletes them.</div></div>
+  </div>
+
+  <div class="card" id="start"><div class="card-h"><span class="ibadge violet"><i data-i="rocket"></i></span>
+      <div class="tx-h"><h3>First steps — choose your AI</h3><div class="sub">Do this once, in Settings.</div></div></div>
+    <p>BroClips needs two AIs: a <b>Thinking AI</b> (it picks the moments and writes titles) and a <b>Listening AI</b>
+      (it turns speech into text). Pick <b>one</b> of these two ways in <a href="/settings.html">Settings</a>:</p>
+    <div class="opt2">
+      <div><h4><i data-i="shield-check"></i>Option A — free and private</h4><p class="hint" style="margin-top:0">Everything stays on your PC.</p>
+        <ol>
+          <li>Install <b>Ollama</b> from <a href="https://ollama.com" target="_blank" rel="noopener">ollama.com</a> (Download → Windows) and start it.</li>
+          <li>Download a model: press the Windows key, type <b>cmd</b>, press Enter, then type
+            <code>ollama pull gemma3:12b</code> and press Enter. It downloads about 8 GB once.
+            On a PC with a small graphics card (or none) use <code>ollama pull gemma3:4b</code> instead, and write
+            <code>gemma3:4b</code> as the model in Settings.</li>
+          <li>In Settings keep <b>Thinking AI: Ollama</b> and <b>Listening AI: On this PC</b>, then press <b>Test</b> on both.</li>
+        </ol>
+        <p class="hint">“On this PC” listening needs the local speech part of the installer (answer <b>Y</b> to “Local speech-to-text”).
+          The first time it downloads its speech model (about 3 GB for the best one).</p></div>
+      <div><h4><i data-i="key-round"></i>Option B — paste a key</h4><p class="hint" style="margin-top:0">A cloud AI does the work.</p>
+        <ul>
+          <li><b>Google Gemini</b> (has a free plan): get a key at <a href="https://aistudio.google.com/apikey" target="_blank" rel="noopener">aistudio.google.com/apikey</a>.</li>
+          <li><b>OpenAI</b> (paid): <a href="https://platform.openai.com/api-keys" target="_blank" rel="noopener">platform.openai.com/api-keys</a>.
+            OpenRouter, Groq and LM Studio work too (same section, pick the service).</li>
+          <li><b>Anthropic Claude</b> (paid): <a href="https://console.anthropic.com" target="_blank" rel="noopener">console.anthropic.com</a> → API keys.</li>
+        </ul>
+        <p>Paste the key in Settings, press <b>Save</b>, then <b>Test</b>. You can mix: for example local listening + a Gemini key for thinking.</p></div>
+    </div>
+    <div class="note info"><i data-i="info"></i><div><b>What is sent with a key:</b> the text of what is said goes to the Thinking AI's company. If you choose a cloud
+      Listening AI, your <b>audio</b> goes to it too. Pictures from the video are sent only if you switch on “Allow sending
+      pictures” in Settings. Your keys stay on this PC (in <code>secrets.json</code>) and each key is only sent to its own company.</div></div>
+  </div>
+
+  <div class="card" id="make"><div class="card-h"><span class="ibadge pink"><i data-i="sparkles"></i></span>
+      <div class="tx-h"><h3>How to make clips</h3><div class="sub">Five steps. The first project takes a minute to set up.</div></div></div>
+    <div class="stepcards">
+      <div class="stepcard"><span class="num">1</span><b>New project</b><p>Press <b>New project</b> (bottom left) and give it a name, for example “Python lessons”.</p></div>
+      <div class="stepcard"><span class="num">2</span><b>Describe the videos</b><p>In the big box: what they are, who watches, which platforms, which language, what tone.</p></div>
+      <div class="stepcard"><span class="num">3</span><b>Pick the details</b><p>The <b>video type</b>, the <b>language</b> and where you post. Switch on <b>🏃 Marathon mode</b> if you want the AI to think longer for better moments.</p></div>
+      <div class="stepcard"><span class="num">4</span><b>Add videos</b><p>Press <b>Add videos</b> and choose your recordings (or paste their paths).</p></div>
+      <div class="stepcard"><span class="num">5</span><b>Press Make</b><p>Its progress shows at the top and on the video's page. You can close the window — BroClips keeps working.</p></div>
+    </div>
+  </div>
+
+  <div class="card" id="line"><div class="card-h"><span class="ibadge amber"><i data-i="list-checks"></i></span><h3>The work line</h3></div>
+    <p>BroClips does <b>one job at a time</b>, in order, so your PC does not get stuck. The pill at the top of every page shows what it is doing.</p>
+    <p>In Settings you can list programs (for example a game) — <b>while one of them is open, BroClips waits</b>. If you want it
+      to work anyway, press <b>Run now</b>. If you close BroClips in the middle of a job, it continues when you start it again.</p>
+  </div>
+
+  <div class="card" id="files"><div class="card-h"><span class="ibadge cyan"><i data-i="folder-open"></i></span><h3>Where are my files?</h3></div>
+    <ul>
+      <li>Your <b>videos</b> stay exactly where they were.</li>
+      <li>Everything BroClips makes is in its <b>data folder</b> (normally <code>C:\Users\<i>you</i>\BroClips</code>) →
+        <code>projects\&lt;project&gt;\videos\&lt;video&gt;\</code>: the Shorts, the long video, thumbnails and texts.
+        Each video page has an <b>Open folder</b> button.</li>
+      <li>Settings and keys: <code>settings.json</code> and <code>secrets.json</code> in the data folder. Problems are written to the <code>logs</code> folder.</li>
+    </ul>
+    <div class="row"><button onclick="openFolder('data')" title="Open the data folder in File Explorer"><i data-i="folder-open"></i>Open the data folder</button>
+      <button onclick="openFolder('logs')" title="Open the logs folder in File Explorer"><i data-i="file-text"></i>Open the logs folder</button></div>
+  </div>
+
+  <div class="card" id="faq"><div class="card-h"><span class="ibadge green"><i data-i="message-square-text"></i></span><h3>Questions</h3></div>
+    <details class="faq" open><summary>I have no NVIDIA graphics card. Does it work?</summary><div class="a">Yes, just slower. In Settings choose the video encoder
+      “Processor only” and the listening model “small”. Or use a key: then the cloud does the heavy thinking.</div></details>
+    <details class="faq"><summary>It is very slow.</summary><div class="a">The first run downloads models, so it is the slowest. A local AI on a PC without a strong graphics
+      card is slow — choose smaller models (<code>gemma3:4b</code>, listening “small”) or use a key. Marathon mode is slower on purpose.</div></details>
+    <details class="faq"><summary>Which model should I use?</summary><div class="a">Thinking: <code>gemma3:12b</code> with a graphics card of 12 GB or more, else
+      <code>gemma3:4b</code>. Listening: “Automatic” picks large-v3 with an NVIDIA card and small without.</div></details>
+    <details class="faq"><summary>Does anything leave my PC?</summary><div class="a">With Ollama and “On this PC”: nothing. With a key: only what is written above
+      (text, audio if cloud listening, pictures only if you allow it) goes to that company.</div></details>
+    <details class="faq"><summary>The Test says Ollama is not running.</summary><div class="a">Start Ollama from the Start menu (it shows a small llama icon next
+      to the clock), then test again.</div></details>
+    <details class="faq"><summary>Something failed.</summary><div class="a">The message tells you what happened. More details are in the logs folder (button above).
+      You can ask for help on GitHub: <a href="https://github.com/omar1001/BroClips/issues" target="_blank" rel="noopener">github.com/omar1001/BroClips/issues</a>.</div></details>
+  </div>
+
+  <div class="card" id="close"><div class="card-h"><span class="ibadge red"><i data-i="power"></i></span><h3>Closing BroClips</h3></div>
+    <p>Closing this window does <b>not</b> stop BroClips: it keeps working in the background and the Desktop shortcut opens it
+      again. To stop it completely (for example before you update it), press this button. Work that is waiting in line
+      continues the next time you start BroClips.</p>
+    <div class="row"><button class="danger" onclick="quitApp(this)" title="Stop BroClips completely (it is not working on a job right now)"><i data-i="power"></i>Close BroClips completely</button>
+      <span id="quitmsg" class="status-line"></span></div>
+  </div>
+
+  <div class="card" id="about"><div class="card-h"><span class="ibadge"><i data-i="info"></i></span><h3>About</h3></div>
+    <p>BroClips is free and open source (MIT licence), made by Omar with a lot of help from an AI (Claude Code).
+      Fonts: Google Fonts (OFL). 3D emoji: Microsoft Fluent Emoji (MIT). Cut-out model: BiRefNet (MIT). Arabic letters:
+      fribidi (LGPL). Video work: ffmpeg. Icons: Lucide (ISC).</p>
+    <p class="hint" id="ver"></p>
+  </div>
+  </div>
+ </div>
+</main>
+<script src="/icons.js"></script>
+<script src="/app.js"></script>
+<script>
+window.onState = s => { $('#ver').textContent = 'Version ' + s.version; };
+async function quitApp(btn) {
+  if (!confirmClick(btn, 'Sure? Click again to close BroClips')) return;
+  const r = await api('/api/quit', {});
+  $('#quitmsg').innerHTML = r.ok ? `<span class="tbadge ok">${ic('circle-check')}BroClips is closing. You can close this window now.</span>`
+    : `<span class="tbadge bad">${ic('triangle-alert')}${esc(r.error || 'It could not close.')} Stop the job first (Stop on its video).</span>`;
+}
+/* the table of contents follows the reading position */
+(function () {
+  const links = [...document.querySelectorAll('.toc a')];
+  const mark = id => links.forEach(a => a.classList.toggle('on', a.getAttribute('href') === '#' + id));
+  const secs = links.map(a => document.querySelector(a.getAttribute('href'))).filter(Boolean);
+  const pick = () => {
+    let cur = secs[0];
+    for (const s of secs) if (s.getBoundingClientRect().top < 160) cur = s;
+    if (innerHeight + scrollY >= document.body.scrollHeight - 4) cur = secs[secs.length - 1];
+    if (cur) mark(cur.id);
+  };
+  addEventListener('scroll', pick, {passive: true});
+  pick();
+})();
+</script>
+</body>
+</html>

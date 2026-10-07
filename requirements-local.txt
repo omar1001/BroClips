@@ -1,0 +1,5 @@
+# Local speech-to-text ("Listening AI: On this PC"), about 1.5 GB. install.bat asks before installing it.
+# On Windows, faster-whisper (CTranslate2) also needs these NVIDIA libraries (cuBLAS + NVRTC) for the GPU.
+faster-whisper>=1.1
+nvidia-cublas-cu12; sys_platform == "win32"
+nvidia-cuda-nvrtc-cu12; sys_platform == "win32"

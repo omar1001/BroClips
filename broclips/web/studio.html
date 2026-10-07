@@ -1,0 +1,591 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Thumbnail studio · BroClips</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="color-scheme" content="dark">
+<link rel="icon" href="/broclips.png">
+<link rel="stylesheet" href="/app.css">
+<style>
+/* Thumbnail studio only (port of LoL Clips' studio.html). The PC draws every picture; this page only shows it. */
+body.studio{height:100vh;min-height:0;display:flex;flex-direction:column;overflow:hidden}
+body.studio .topbar{flex:none;gap:12px}
+body.studio .wrap{flex:1;min-height:0;align-items:stretch}
+.st-title{display:flex;align-items:center;gap:10px;min-width:0}
+.st-title .ibadge{width:34px;height:34px;border-radius:10px}
+.st-title b{display:block;font:700 16px/1.2 var(--f-d);white-space:nowrap}
+.st-title .hint{display:block;margin:0;font-size:12px;max-width:260px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+body.studio .status{max-width:min(380px,28vw)}
+.dirty{font-size:12.5px;font-weight:700;color:var(--warn-t);white-space:nowrap}
+.dirty:not(:empty){padding:4px 10px;border-radius:999px;background:rgba(245,158,11,.12);border:1px solid rgba(245,158,11,.3)}
+.left{flex:1;min-width:0;padding:16px 22px 34px;overflow:auto}
+.right{width:452px;flex:none;border-left:1px solid var(--line);overflow:auto;padding:16px 16px 44px;background:linear-gradient(180deg,rgba(18,21,28,.75),rgba(13,16,22,.6))}
+.stbar{display:flex;align-items:center;gap:10px;flex-wrap:wrap;max-width:1280px;margin:0 auto 14px}
+.tabs{display:inline-flex;gap:4px;padding:4px;border-radius:13px;background:rgba(255,255,255,.035);border:1px solid var(--line);flex-wrap:wrap}
+.tabs button{min-width:38px;height:32px;padding:0 10px;border:1px solid transparent;border-radius:9px;background:transparent;box-shadow:none;color:var(--text-2);font-weight:700}
+.tabs button:hover{background:rgba(255,255,255,.06);color:#fff;transform:none}
+button.on,.btn.on{border-color:transparent!important;color:#fff!important;background:linear-gradient(135deg,rgba(255,77,141,.55),rgba(139,92,246,.6) 55%,rgba(34,211,238,.5))!important;
+  box-shadow:inset 0 1px 0 rgba(255,255,255,.2),0 6px 16px -8px rgba(139,92,246,.9)!important}
+#warns .note{max-width:1280px;margin:0 auto 12px}
+.stagewrap{position:relative;max-width:1280px;margin:0 auto;padding:2px;border-radius:18px;background:var(--grad-line);
+  box-shadow:0 34px 80px -36px rgba(139,92,246,.75),0 0 70px -30px rgba(255,77,141,.5),0 0 90px -40px rgba(34,211,238,.45)}
+.stage{position:relative;width:100%;aspect-ratio:16/9;background:#000;border-radius:16px;overflow:hidden;user-select:none;cursor:crosshair}
+.stage img{width:100%;height:100%;display:block;pointer-events:none}
+.selbox{position:absolute;border:2px solid rgba(255,255,255,.95);pointer-events:none;border-radius:6px;box-shadow:0 0 0 1px rgba(0,0,0,.55),0 0 16px rgba(167,139,250,.9)}
+.wait{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;gap:12px;background:rgba(7,8,12,.62);-webkit-backdrop-filter:blur(3px);backdrop-filter:blur(3px);
+  font-size:17px;font-weight:700;text-align:center;padding:20px}
+.wait::before{content:"";width:22px;height:22px;flex:none;border-radius:50%;border:3px solid rgba(255,255,255,.22);border-top-color:#fff;animation:spin .8s linear infinite}
+.tipline{max-width:1280px;margin:12px auto 0;color:var(--text-2);font-size:12.5px;line-height:1.7}
+.tipline svg.i{width:15px;height:15px;color:var(--lilac);margin-right:6px;vertical-align:-3px}
+.tipline kbd{font-size:11px;padding:0 5px}
+.selbar{display:flex;align-items:center;gap:8px;flex-wrap:wrap;max-width:1280px;margin:12px auto 0;padding:8px 10px;border-radius:14px;
+  background:rgba(24,28,37,.92);border:1px solid rgba(167,139,250,.35);box-shadow:0 18px 40px -22px rgba(0,0,0,.9),0 0 0 4px rgba(139,92,246,.08)}
+.selname{display:inline-flex;align-items:center;gap:7px;font-weight:700;margin-right:4px}
+.selname svg.i{color:var(--lilac)}
+#msg{max-width:1280px;margin:12px auto 0}
+.ytrow{display:flex;gap:26px;align-items:flex-start;flex-wrap:wrap;max-width:1280px;margin:20px auto 0;padding:18px 20px;border-radius:18px;background:#0f0f0f;border:1px solid rgba(255,255,255,.08)}
+.ytlab{display:flex;align-items:center;gap:6px;font-size:11.5px;font-weight:750;letter-spacing:.08em;text-transform:uppercase;color:#aaa;margin-bottom:9px}
+.ytlab svg.i{width:14px;height:14px}
+.yt{width:340px;max-width:100%;flex:none;font-family:Roboto,Arial,var(--f)}
+.yt .pic{position:relative;border-radius:12px;overflow:hidden;aspect-ratio:16/9;background:#222}
+.yt .pic img{width:100%;height:100%;display:block}
+.yt .dur{position:absolute;right:6px;bottom:6px;background:rgba(0,0,0,.82);font-size:12px;font-weight:600;padding:1px 5px;border-radius:5px;color:#fff;font-variant-numeric:tabular-nums}
+.ytmeta{display:flex;gap:11px;margin-top:11px}
+.ytmeta .av{width:36px;height:36px;border-radius:50%;flex:none;background:var(--grad)}
+.ytm{min-width:0}
+.yt .tt{font-weight:600;font-size:15px;line-height:1.35;color:#f1f1f1;overflow:hidden;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical}
+.yt .ch{color:#aaa;font-size:13px;margin-top:2px}
+.yt.small{width:180px}
+.yt.small .pic{border-radius:8px}
+.yt.small .ytmeta{gap:8px;margin-top:8px}
+.yt.small .av{width:24px;height:24px}
+.yt.small .tt{font-size:12.5px}
+.yt.small .ch{font-size:11.5px}
+.ytnote{max-width:250px;align-self:center;color:#aaa}
+.sec{position:relative;background:linear-gradient(180deg,rgba(255,255,255,.02),rgba(255,255,255,0) 90px),var(--panel);border:1px solid var(--line);border-radius:16px;
+  padding:14px 14px 15px;margin-bottom:12px;box-shadow:var(--sh-1)}
+.sec h3{display:flex;align-items:center;gap:9px;flex-wrap:wrap;margin:0 0 11px;font-size:15px}
+.sec h3 .hint{font-weight:400;display:inline;margin:0;font-size:12.5px}
+.sec h3 .num{width:24px;height:24px;border-radius:50%;flex:none;display:grid;place-items:center;font:800 12.5px var(--f-d);color:#fff;background:var(--grad);
+  box-shadow:0 6px 14px -6px rgba(255,77,141,.8)}
+.sec h3 .num svg.i{width:14px;height:14px}
+.sec.more{border:1px solid transparent;background:linear-gradient(180deg,rgba(255,255,255,.03),rgba(255,255,255,0) 120px) padding-box,linear-gradient(var(--panel),var(--panel)) padding-box,var(--grad-line) border-box;
+  box-shadow:var(--sh-1),0 24px 50px -30px rgba(139,92,246,.6)}
+.sec textarea{font-size:14.5px}
+.sec .lab{font-size:12.5px;color:var(--text-2);font-weight:600;margin:10px 0 6px}
+.sec .row{gap:7px}
+#tx{font-size:20px;font-weight:650}
+.sec .chips{margin-top:9px;gap:6px}
+.fonts button{font-size:20px;height:40px;padding:0 10px;min-width:62px;font-weight:400}
+.sw{width:54px;height:34px;border-radius:9px;font-weight:800;font-size:15px;padding:0;-webkit-text-stroke:1px #000;border:2px solid rgba(255,255,255,.12)}
+.sw.on{border:2px solid #fff!important;box-shadow:0 0 0 3px rgba(167,139,250,.6)!important}
+.tiles{display:grid;grid-template-columns:repeat(3,1fr);gap:7px;max-height:262px;overflow:auto;padding-right:2px}
+.ftile{position:relative;cursor:pointer;border-radius:9px;overflow:hidden;border:2px solid transparent;background:#000;aspect-ratio:16/9;transition:border-color var(--t),transform var(--t) var(--ease)}
+.ftile:hover{border-color:rgba(255,255,255,.35);transform:translateY(-1px)}
+.ftile img{width:100%;height:100%;object-fit:cover;display:block}
+.ftile.cur{border-color:#fde047;box-shadow:0 0 0 2px rgba(253,224,71,.25)}
+.ftile span{position:absolute;left:4px;bottom:3px;font-size:10.5px;font-weight:700;background:rgba(0,0,0,.7);padding:0 5px;border-radius:5px;font-variant-numeric:tabular-nums}
+.subs{display:grid;grid-template-columns:repeat(4,1fr);gap:7px;margin-top:8px}
+.sub{position:relative;cursor:pointer;border-radius:10px;border:2px solid var(--line-2);aspect-ratio:1;overflow:hidden;
+  background:repeating-conic-gradient(#262a33 0 25%,#1c1f26 0 50%) 0 0/16px 16px;display:flex;align-items:center;justify-content:center;transition:border-color var(--t)}
+.sub:hover{border-color:var(--line-3)}
+.sub img{max-width:100%;max-height:100%;display:block}
+.sub.cur{border-color:#fde047}
+.sub span{position:absolute;left:3px;bottom:3px;display:grid;place-items:center;width:20px;height:20px;border-radius:6px;background:rgba(0,0,0,.72)}
+.sub span svg.i{width:12px;height:12px}
+.emo{display:grid;grid-template-columns:repeat(8,1fr);gap:4px}
+.emo img{width:100%;cursor:pointer;border-radius:9px;padding:3px;transition:background var(--t),transform var(--t) var(--ease)}
+.emo img:hover{background:rgba(255,255,255,.08);transform:scale(1.12)}
+.colors{display:inline-flex;gap:6px;align-items:center;flex-wrap:wrap}
+.colors button{width:26px;height:26px;border-radius:50%;padding:0;border:2px solid rgba(255,255,255,.35);box-shadow:none}
+.colors button:hover{transform:scale(1.12)}
+.gal{position:fixed;inset:0;background:rgba(5,6,10,.82);-webkit-backdrop-filter:blur(10px);backdrop-filter:blur(10px);z-index:50;display:flex;padding:24px}
+.galin{flex:1;display:flex;flex-direction:column;min-height:0;max-width:1500px;margin:0 auto;padding:16px 18px;border-radius:20px;background:var(--panel);border:1px solid var(--line-2);box-shadow:0 40px 100px -30px rgba(0,0,0,.9)}
+.galbar{display:flex;gap:10px;align-items:center;margin-bottom:14px;flex-wrap:wrap}
+.galbar b{font:700 17px var(--f-d)}
+.galbar .hint{margin:0}
+.galgrid{flex:1;overflow:auto;display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:12px;align-content:start;padding:2px}
+.gi{position:relative;border:3px solid transparent;border-radius:12px;overflow:hidden;cursor:pointer;background:#000;transition:border-color var(--t),transform var(--t) var(--ease)}
+.gi:hover{transform:translateY(-2px)}
+.gi img{width:100%;display:block;aspect-ratio:16/9}
+.gi.on{border-color:var(--bad)!important;background:#000!important;box-shadow:0 0 0 3px rgba(239,68,68,.25)!important}
+.gi .n{position:absolute;left:7px;top:7px;display:inline-flex;align-items:center;gap:5px;background:rgba(0,0,0,.75);padding:3px 8px;border-radius:8px;font-weight:700;font-size:13px}
+.gi .n svg.i{width:13px;height:13px}
+.gi input{position:absolute;right:9px;top:9px;width:24px;height:24px;accent-color:var(--bad)}
+@media (max-width:1000px){body.studio .wrap{flex-direction:column;overflow:auto}.left{flex:none;overflow:visible}
+  .right{width:auto;border-left:0;border-top:1px solid var(--line);overflow:visible}
+  body.studio .status{display:none}}
+</style>
+</head>
+<body class="studio">
+<header class="topbar">
+  <a class="btn small" id="back" href="/" title="Back to this video's page"><i data-i="arrow-left"></i>Back</a>
+  <div class="st-title"><span class="ibadge"><i data-i="palette"></i></span><div><b>Thumbnail studio</b><span id="vname" class="hint" dir="auto"></span></div></div>
+  <div class="status" id="statuspill" title="The work line: BroClips does one job at a time, in this order"><span class="dot"></span><span id="work">Connecting…</span></div>
+  <button id="runnow" class="primary small" hidden onclick="runNow()" title="Start the waiting work now, even though that program is open (it may run slower)"><i data-i="play"></i>Run now</button>
+  <div class="grow"></div>
+  <span class="dirty" id="dirty"></span>
+  <button id="undo" class="small" onclick="undo()" title="Undo the last change (Ctrl+Z)"><i data-i="undo"></i>Undo</button>
+  <button class="small" onclick="save(true)" title="Keep it as an extra thumbnail (the one you opened stays as it was)"><i data-i="image-plus"></i>Save as a new one</button>
+  <button class="go" onclick="save(false)" title="Keep this as the thumbnail you have open (it is saved in the video's thumbs folder, ready to upload)"><i data-i="save"></i>Save</button>
+  <button id="del" class="small iconbtn danger" onclick="delThumb(this)" aria-label="Delete this thumbnail" title="Move this thumbnail to the Recycle Bin"><i data-i="trash"></i></button>
+</header>
+<div class="wrap">
+ <div class="left">
+  <div class="stbar">
+    <div class="tabs" id="tabs" aria-label="The thumbnails of this video"></div>
+    <div class="grow"></div>
+    <button class="small" onclick="autoNew()" title="BroClips makes 3 new thumbnails in 3 different styles from the best moments. The ones you have stay."><i data-i="sparkles"></i>3 new automatic</button>
+    <button class="small" onclick="gallery(true)" title="See all thumbnails of this video at once, and delete several"><i data-i="layout-grid"></i>All · delete several</button>
+  </div>
+  <div id="warns"></div>
+  <div class="stagewrap"><div class="stage" id="stage" title="Click a thing to choose it · drag to move it · mouse wheel = bigger / smaller"><img id="pic" alt=""><div class="selbox" id="selbox" hidden></div><div class="wait" id="wait" hidden></div></div></div>
+  <div class="tipline"><i data-i="mouse-pointer-click"></i>Click a thing to choose it · drag it to move it · mouse wheel = bigger / smaller · drag the picture itself to move it, wheel on it = zoom ·
+    <kbd>Delete</kbd> removes a sticker · <kbd>Ctrl</kbd>+<kbd>Z</kbd> = undo</div>
+  <div class="selbar" id="selbar" hidden></div>
+  <div class="msg" id="msg"></div>
+  <div class="ytrow">
+    <div><div class="ytlab"><i data-i="monitor"></i>On YouTube · computer</div>
+      <div class="yt" title="How it looks on YouTube on a computer"><div class="pic"><img id="ph1" alt=""><span class="dur" id="dur">10:00</span></div>
+        <div class="ytmeta"><span class="av"></span><div class="ytm"><div class="tt" id="ytt" dir="auto"></div><div class="ch">Your channel</div><div class="ch">1.2K views · 1 hour ago</div></div></div></div></div>
+    <div><div class="ytlab"><i data-i="smartphone"></i>Phone</div>
+      <div class="yt small" title="How it looks on YouTube on a phone"><div class="pic"><img id="ph2" alt=""><span class="dur" id="dur2">10:00</span></div>
+        <div class="ytmeta"><span class="av"></span><div class="ytm"><div class="tt" id="ytt2" dir="auto"></div><div class="ch">Your channel · 1.2K views</div></div></div></div></div>
+    <div class="hint ytnote">📱 This is how big it is on YouTube (computer and phone). If you can't read the words here, make them bigger or shorter.</div>
+  </div>
+ </div>
+ <div class="right" id="right"><div class="loading"><div class="skel"></div><div class="skel"></div><div class="skel"></div></div></div>
+</div>
+<div class="gal" id="gal" hidden><div class="galin"><div class="galbar"><span class="ibadge"><i data-i="layout-grid"></i></span><b>All thumbnails of this video</b>
+  <span class="hint">Click a picture to tick it. Click its number to open it.</span><div class="grow"></div>
+  <button class="small" onclick="galAll(true)" title="Tick every thumbnail">Tick all</button><button class="small" onclick="galAll(false)" title="Untick every thumbnail">Untick all</button>
+  <button id="galdel" class="small danger" onclick="galDelete(this)" title="Move the ticked thumbnails to the Recycle Bin"><i data-i="trash"></i>Delete ticked</button>
+  <button class="small" onclick="gallery(false)" title="Close this view"><i data-i="x"></i>Close</button></div><div class="galgrid" id="galgrid"></div></div></div>
+<input type="file" id="upfile" accept="image/png,image/jpeg,image/webp" hidden>
+<script src="/icons.js"></script>
+<script src="/app.js"></script>
+<script>
+const Q = new URLSearchParams(location.search), PID = Q.get('project') || '', VID = Q.get('video') || '';
+const PV = `project=${encodeURIComponent(PID)}&video=${encodeURIComponent(VID)}`;
+const W = 1280, H = 720;
+let I = null, D = null, N = null, boxes = {}, sel = null, hist = [], dirty = false, url = null;
+let briefTxt = null, aiPrompt = '', aiCount = '', aiPoll = null, aiJob = null, galSel = new Set();
+let slot = 1, cutPolls = {}, cutInfo = {}, momentI = '', stripT = [], leaving = false;
+
+const say = t => { $('#msg').textContent = t || ''; };
+const clone = o => JSON.parse(JSON.stringify(o));
+const isArabic = s => /[\u0600-\u06FF\u0750-\u077F\u08A0-\u08FF\uFB50-\uFDFF\uFE70-\uFEFF]/.test(s || '');
+function mmss(t) { t = Math.max(0, +t || 0); const s = Math.floor(t % 60), d = Math.round((t % 1) * 10) % 10;
+  return Math.floor(t / 60) + ':' + String(s).padStart(2, '0') + (d ? '.' + d : ''); }
+function body(extra) { return Object.assign({project: PID, video: VID}, extra || {}); }
+function setDirty(v) { dirty = v; $('#dirty').textContent = v ? '● not saved' : ''; }
+function remember() { hist.push(clone(D)); if (hist.length > 60) hist.shift(); $('#undo').disabled = false; setDirty(true); }
+function undo() { if (!hist.length) return; D = hist.pop(); $('#undo').disabled = !hist.length; draw(); panel(); }
+function waitBox(text) { const w = $('#wait'); w.textContent = text || ''; w.hidden = !text; }
+
+/* "Not saved yet — click again": a second click within 5 s goes ahead (no pop-up windows). */
+let sureKey = '', sureTime = 0;
+function sure(key, text) {
+  if (!dirty) return true;
+  if (sureKey === key && Date.now() - sureTime < 5000) { sureKey = ''; return true; }
+  sureKey = key; sureTime = Date.now(); toast(text || 'This thumbnail is not saved yet. Click again to go on without saving.');
+  return false;
+}
+
+// ---------- start ----------
+async function start() {
+  $('#back').href = `/#p=${encodeURIComponent(PID)}&v=${encodeURIComponent(VID)}`;
+  $('#back').addEventListener('click', e => { if (!sure('back', 'This thumbnail is not saved yet. Click Back again to leave without saving.')) e.preventDefault(); else leaving = true; });
+  I = await api('/api/thumbs/info?' + PV);
+  if (I.error || I.offline) { $('#right').innerHTML = `<div class="note bad">${ic('triangle-alert')}<div>${esc(I.error || 'Could not open the studio.')}</div></div>`; say(I.error || ''); return; }
+  $('#vname').textContent = I.name; $('#vname').title = I.name;
+  for (const id of ['ytt', 'ytt2']) $('#' + id).textContent = I.title || I.name;
+  $('#dur').textContent = $('#dur2').textContent = I.dur || '10:00';
+  const css = I.fonts.map(f => `@font-face{font-family:"TS_${f.key}";src:url("/api/thumbs/font/${encodeURIComponent(f.file)}")}`).join('');
+  const st = document.createElement('style'); st.textContent = css; document.head.appendChild(st);
+  warns();
+  const n = Q.get('n');
+  await openThumb(n === 'new' ? null : n ? parseInt(n) : (I.thumbs[0] ? I.thumbs[0].n : null), true);
+  const s0 = await api('/api/thumbs/aistate?' + PV);
+  if (['working', 'queued', 'waiting'].includes(s0.state)) { aiJob = s0.job; pollAI(); }
+}
+
+function warns() {
+  const w = [];
+  if (I.making) w.push(['info', 'loader', 'This video is being made right now. You can look around, but saving waits until it is done.']);
+  if (I.fonts_missing) w.push(['warn', 'triangle-alert', 'Some fonts are not downloaded yet. Get them in <a href="/settings.html">Settings</a> → “Fonts, emoji and the cut-out model”.']);
+  if (!I.raqm && (I.lang === 'ar' || (D && isArabic(D.text.s)))) w.push(['warn', 'triangle-alert', 'Arabic letters need a small extra file (the Arabic letter fix). Download “Fonts and emoji” in <a href="/settings.html">Settings</a>, then close and start BroClips again.']);
+  $('#warns').innerHTML = w.map(([k, icn, x]) => `<div class="note ${k}">${ic(icn, icn === 'loader' ? 'spin' : '')}<div>${x}</div></div>`).join('');
+}
+
+async function openThumb(n, first) {
+  if (!first && !sure('open' + n, 'This thumbnail is not saved yet. Click again to open the other one without saving.')) return;
+  N = n; hist = []; $('#undo').disabled = true; sel = null; setDirty(false); say('');
+  waitBox('Opening…');
+  const r = await api('/api/thumbs/open', body({n}));
+  waitBox('');
+  if (r.error) { say('⚠️ ' + r.error); return; }
+  D = r.design; Object.assign(cutInfo, r.cut || {}); if (r.note) say(r.note);
+  for (const [sid, st] of Object.entries(r.cut || {})) if (['working', 'queued', 'waiting'].includes(st)) waitCut(sid);
+  tabs(); panel(); draw(); warns();
+}
+
+function tabs() {
+  $('#tabs').innerHTML = I.thumbs.map(t => `<button class="${t.n === N ? 'on' : ''}" onclick="openThumb(${t.n})" title="Open thumbnail ${t.n}">${t.n}</button>`).join('') +
+    `<button class="${N === null ? 'on' : ''}" onclick="openThumb(null)" title="Start a new thumbnail">${ic('plus')}New</button>`;
+  $('#del').disabled = N === null;
+}
+
+// ---------- drawing (the PC draws it; this page only shows it). One render at a time, the newest wins ----------
+let busy = false, again = false;
+async function draw() {
+  if (!D) return; if (busy) { again = true; return; } busy = true; again = false;
+  try {
+    const r = await fetch('/api/thumbs/render', {method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify(body({design: D}))});
+    if (r.ok) {
+      boxes = JSON.parse(r.headers.get('X-Boxes') || '{}'); const b = await r.blob(); const u = URL.createObjectURL(b);
+      $('#pic').src = u; $('#ph1').src = u; $('#ph2').src = u; if (url) setTimeout(((o) => () => URL.revokeObjectURL(o))(url), 2000); url = u;
+    } else { const j = await r.json().catch(() => ({})); say('⚠️ ' + (j.error || 'Could not draw it.')); }
+  } catch (e) { say('⚠️ BroClips is not answering. Is it still running?'); }
+  busy = false; if (again) draw(); else showSel();
+}
+let tmr = null; function drawSoon(ms) { clearTimeout(tmr); tmr = setTimeout(draw, ms || 220); }
+
+// ---------- choosing and dragging on the picture ----------
+function elOf(k) { if (!k || k === 'bg') return D.bg; if (/^s\d+$/.test(k)) return D.stickers[+k.slice(1)]; return D[k]; }
+function hit(x, y) {
+  const order = []; D.stickers.forEach((s, i) => { if (s.k === 'emoji') order.push('s' + i); }); order.push('text', 'text2');
+  D.stickers.forEach((s, i) => { if (s.k !== 'emoji') order.push('s' + i); }); order.push('subject', 'subject2');
+  for (const k of order) {
+    const b = boxes[k]; if (!b) continue; const pad = k.startsWith('subject') ? 0 : 6;
+    if (x >= b[0] - pad && x <= b[2] + pad && y >= b[1] - pad && y <= b[3] + pad) {
+      if (k.startsWith('subject')) { const cx = (b[0] + b[2]) / 2, w = b[2] - b[0]; if (Math.abs(x - cx) > w * 0.38) continue; }
+      return k;
+    }
+  }
+  return 'bg';
+}
+function showSel() {
+  const sb = $('#selbox'), st = $('#stage'); const b = sel && sel !== 'bg' ? boxes[sel] : null;
+  if (!b) sb.hidden = true;
+  else { const k = st.clientWidth / W; sb.hidden = false;
+    sb.style.left = Math.max(0, b[0] * k) + 'px'; sb.style.top = Math.max(0, b[1] * k) + 'px';
+    sb.style.width = (Math.min(W, b[2]) - Math.max(0, b[0])) * k + 'px'; sb.style.height = (Math.min(H, b[3]) - Math.max(0, b[1])) * k + 'px'; }
+  selBar();
+}
+let drag = null;
+function stageXY(e) { const r = $('#stage').getBoundingClientRect(); return [(e.clientX - r.left) * W / r.width, (e.clientY - r.top) * H / r.height]; }
+$('#stage').addEventListener('mousedown', e => {
+  if (!D || e.button !== 0) return; const [x, y] = stageXY(e);
+  sel = hit(x, y); if (!elOf(sel)) sel = 'bg';
+  const o = elOf(sel); drag = {mx: e.clientX, my: e.clientY, ox: sel === 'bg' ? o.cx : o.x, oy: sel === 'bg' ? o.cy : o.y, moved: false, before: clone(D)};
+  showSel(); e.preventDefault();
+});
+window.addEventListener('mousemove', e => {
+  if (!drag) return; const st = $('#stage'); const dx = (e.clientX - drag.mx) / st.clientWidth, dy = (e.clientY - drag.my) / st.clientHeight;
+  if (!drag.moved && Math.abs(dx) + Math.abs(dy) < 0.004) return;
+  if (!drag.moved) { hist.push(drag.before); if (hist.length > 60) hist.shift(); $('#undo').disabled = false; setDirty(true); drag.moved = true; }
+  const o = elOf(sel);
+  if (sel === 'bg') { o.cx = Math.min(1, Math.max(0, drag.ox - dx / o.z)); o.cy = Math.min(1, Math.max(0, drag.oy - dy / o.z)); }
+  else { o.x = +(drag.ox + dx).toFixed(4); o.y = +(drag.oy + dy).toFixed(4); }
+  draw();
+});
+window.addEventListener('mouseup', () => { if (drag) { const moved = drag.moved; drag = null; if (moved) panel(); } });
+let lastWheel = 0;
+$('#stage').addEventListener('wheel', e => {   // the wheel works on the thing under the mouse (the picture = zoom)
+  if (!D) return; e.preventDefault(); const f = e.deltaY < 0 ? 1.07 : 1 / 1.07; const [x, y] = stageXY(e);
+  const k = hit(x, y); const o = elOf(k); if (!o) return;
+  sel = k; if (Date.now() - lastWheel > 700) remember(); else setDirty(true); lastWheel = Date.now();
+  if (k === 'bg') o.z = Math.min(4, Math.max(1, +(o.z * f).toFixed(3)));
+  else if (k === 'text' || k === 'text2') o.size = Math.round(Math.min(320, Math.max(30, o.size * f)));
+  else if (k.startsWith('subject')) o.h = +Math.min(2.2, Math.max(0.1, o.h * f)).toFixed(3);
+  else o.s = +Math.min(1.2, Math.max(0.04, o.s * f)).toFixed(3);
+  draw();
+}, {passive: false});
+window.addEventListener('keydown', e => {
+  const typing = ['TEXTAREA', 'INPUT', 'SELECT'].includes(document.activeElement.tagName);
+  if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'z' && !typing) { e.preventDefault(); undo(); return; }
+  if (typing || !sel || sel === 'bg' || !D) return;
+  if (e.key === 'Delete' || e.key === 'Backspace') { e.preventDefault(); removeSel(); return; }
+  const mv = {ArrowLeft: [-.005, 0], ArrowRight: [.005, 0], ArrowUp: [0, -.008], ArrowDown: [0, .008]}[e.key];
+  if (mv) { e.preventDefault(); remember(); const o = elOf(sel); o.x += mv[0]; o.y += mv[1]; draw(); }
+});
+window.addEventListener('resize', showSel);
+window.addEventListener('beforeunload', e => { if (dirty && !leaving) { e.preventDefault(); e.returnValue = ''; } });
+
+// ---------- the bar for the chosen thing ----------
+function selBar() {
+  const b = $('#selbar'); const k = sel; if (!D || !k || k === 'bg' || !elOf(k)) { b.hidden = true; return; }
+  const o = elOf(k);
+  const [icn, name] = k === 'text' ? ['type', 'The words'] : k === 'text2' ? ['type', 'The small words'] : k === 'subject' ? ['user-round', 'Subject 1'] :
+    k === 'subject2' ? ['user-round', 'Subject 2'] : o.k === 'emoji' ? ['smile', 'Emoji'] : o.k === 'arrow' ? ['arrow-up-right', 'Arrow'] : ['circle', 'Circle'];
+  let h = `<span class="selname">${ic(icn)}${name}</span><button class="small" onclick="grow(1.12)" title="Make it bigger">${ic('zoom-in')}Bigger</button><button class="small" onclick="grow(1/1.12)" title="Make it smaller">${ic('zoom-out')}Smaller</button>`;
+  if (!k.startsWith('subject')) h += `<button class="small iconbtn" onclick="turn(8)" title="Turn it left" aria-label="Turn it left">${ic('rotate-ccw')}</button><button class="small iconbtn" onclick="turn(-8)" title="Turn it right" aria-label="Turn it right">${ic('rotate-cw')}</button>`;
+  if (k.startsWith('subject')) h += `<button class="small" onclick="flip()" title="Mirror it (left ↔ right)">${ic('flip-horizontal')}Mirror</button>`;
+  if (o.k === 'arrow' || o.k === 'circle') h += `<span class="colors">${['#ff1e1e', '#ffe600', '#ffffff', '#3dff8a', '#38c8ff'].map(c => `<button style="background:${c}" onclick="colour('${c}')" title="This colour" aria-label="Colour ${c}"></button>`).join('')}</span>`;
+  h += `<div class="grow"></div><button class="small danger" onclick="removeSel()" title="Take it off the picture">${ic('trash')}Remove</button>`;
+  b.innerHTML = h; b.hidden = false;
+}
+function grow(f) { const k = sel, o = elOf(k); if (!o || k === 'bg') return; remember();
+  if (k === 'text' || k === 'text2') o.size = Math.round(Math.min(320, Math.max(30, o.size * f)));
+  else if (k.startsWith('subject')) o.h = +Math.min(2.2, Math.max(0.1, o.h * f)).toFixed(3);
+  else o.s = +Math.min(1.2, Math.max(0.04, o.s * f)).toFixed(3);
+  draw(); }
+function turn(a) { const o = elOf(sel); if (!o || sel === 'bg') return; remember(); o.rot = Math.round(((o.rot || 0) + a) * 10) / 10; draw(); }
+function flip() { const o = elOf(sel); if (!o) return; remember(); o.flip = !o.flip; draw(); }
+function colour(c) { const o = elOf(sel); if (!o) return; remember(); o.color = c; draw(); }
+function removeSel() {
+  const k = sel; if (!k || k === 'bg') return; remember();
+  if (/^s\d+$/.test(k)) D.stickers.splice(+k.slice(1), 1); else if (k === 'text') D.text.s = ''; else if (k === 'text2') D.text2 = null; else D[k].on = false;
+  sel = null; draw(); panel();
+}
+
+// ---------- the controls on the right ----------
+function effFont() { const t = D.text; const f = I.fonts.find(x => x.key === t.font);
+  if (isArabic(t.s) && (!f || f.script === 'latin')) return 'lalezar'; return t.font; }
+function fontButtons() {
+  const ar = isArabic(D.text.s), cur = effFont();
+  return I.fonts.map(f => {
+    const off = ar && f.script === 'latin';
+    return `<button class="fontbtn ${cur === f.key ? 'on' : ''}" data-script="${f.script}" ${off ? 'disabled' : ''} style="font-family:'TS_${f.key}'" onclick="setT('font','${f.key}')"
+      title="${esc(f.name)} — ${esc(f.help)}${f.script === 'latin' ? ' (Latin letters only)' : ' (Arabic and Latin letters)'}">${f.script === 'arabic' ? 'أبجد' : 'Abc'}</button>`;
+  }).join('') || '<span class="hint">No fonts yet — download them in Settings.</span>';
+}
+function panel() {
+  if (!D || !I) return;
+  const t = D.text, b = D.bg;
+  if (briefTxt === null) briefTxt = I.brief || '';
+  const styleName = Object.fromEntries(I.presets);
+  let h = `<div class="sec more"><h3><span class="num">${ic('sparkles')}</span>Get more thumbnails <span class="hint">(as many times as you like)</span></h3>
+    <div class="lab" style="margin-top:0">About this video — helps the AI (saved for this video)</div>
+    <textarea id="brief" rows="2" dir="auto" placeholder="e.g. A lesson about for loops in Python; the funny part is my mistake at 2:10" title="A few words about this video, in your words. The AI reads it.">${esc(briefTxt)}</textarea>
+    <div class="lab">What you want (optional) — a number inside works too (“make 4 with big yellow words”)</div>
+    <textarea id="aiq" rows="2" dir="auto" placeholder="e.g. funny ones about my mistake, red colours" title="Tell the AI what kind of thumbnails you want">${esc(aiPrompt)}</textarea>
+    <div class="row" style="margin-top:10px"><span class="hint" style="margin:0">How many</span><input id="aicount" type="number" min="1" max="12" placeholder="6" value="${esc(aiCount)}" style="width:72px" title="How many new thumbnails (1-12)">
+      <button onclick="moreRandom()" title="Instant, no AI: a random picture, style, words, font, colour and emoji">${ic('dice-5')}Random mix</button>
+      <button class="go" onclick="moreAI()" title="Your Thinking AI (Settings) reads your words and the video's moments and designs them (about 1 minute; it waits in the work line)">${ic('sparkles')}Make with AI</button></div>
+    <div class="msg" id="aimsg"></div></div>`;
+  h += `<div class="sec"><h3><span class="num">1</span>Style <span class="hint">(puts everything in place for you)</span></h3><div class="row">${I.presets.map(([k, l]) => `<button class="small ${D.preset === k ? 'on' : ''}" onclick="style_('${k}')" title="${esc(I.style_help[k] || '')}">${l}</button>`).join('')}</div>
+    <div class="hint" style="margin-top:8px">${esc(styleName.subject)} and ${esc(styleName.split)} need a subject (part 4). ${esc(styleName.headline)} = huge words, good for lessons.</div></div>`;
+  h += `<div class="sec"><h3><span class="num">2</span>Words <span class="hint">(2-4 words work best · Enter = new line)</span></h3>
+    <textarea id="tx" rows="2" dir="auto" placeholder="Type the words here…" title="The big words on the thumbnail">${esc(t.s)}</textarea>
+    <div class="chips">${I.texts.map((x, i) => `<button class="chip" dir="auto" onclick="useText(${i})" title="Use these words">${esc(x.s)}${x.e ? ' ' + x.e : ''}</button>`).join('')}</div>
+    <div class="lab">Font</div><div class="row fonts" id="fontrow">${fontButtons()}</div>
+    <div class="lab">Colours</div><div class="row">${I.styles.map(s => `<button class="sw ${t.style === s.key ? 'on' : ''}" title="${esc(s.name)}${s.box ? ' (best with the Label style)' : ''}" aria-label="${esc(s.name)}" style="background:${s.box ? s.box : `linear-gradient(${s.fill[0]},${s.fill[1]})`};color:${s.box ? s.fill[0] : '#fff'}" onclick="setT('style','${s.key}')">${s.box ? 'Aa' : ''}</button>`).join('')}</div>
+    <div class="row" style="margin-top:10px"><button class="small" onclick="sel='text';grow(1.1)" title="Bigger words">${ic('zoom-in')}Bigger</button><button class="small" onclick="sel='text';grow(1/1.1)" title="Smaller words">${ic('zoom-out')}Smaller</button><button class="small" onclick="sel='text';turn(4)" title="Tilt left">${ic('rotate-ccw')}Tilt</button><button class="small" onclick="sel='text';turn(-4)" title="Tilt right">${ic('rotate-cw')}Tilt</button></div></div>`;
+  h += `<div class="sec"><h3><span class="num">3</span>Picture <span class="hint" id="tlabel">at ${mmss(b.t)} of the video</span></h3>
+    <div class="row"><button class="small" onclick="nudge(-1)" title="1 second earlier">${ic('chevron-left')}1 s</button><button class="small" onclick="nudge(-0.2)" title="A little earlier">${ic('chevron-left')}0.2 s</button><button class="small" onclick="nudge(0.2)" title="A little later">0.2 s${ic('chevron-right')}</button><button class="small" onclick="nudge(1)" title="1 second later">1 s${ic('chevron-right')}</button></div>
+    <div class="row" style="margin-top:8px"><span class="hint" style="margin:0;width:38px">Time</span><input type="range" id="tslider" min="0" max="${I.dur_s}" step="0.1" value="${b.t}" style="flex:1" title="Any moment of the video"></div>
+    <div class="row" style="margin-top:4px"><span class="hint" style="margin:0;width:38px">Zoom</span><input type="range" min="1" max="3.5" step="0.05" value="${b.z}" style="flex:1" oninput="bgSet('z',+this.value)" title="Zoom into the picture"></div>
+    <div class="row" style="margin-top:6px"><button class="small ${b.punch ? 'on' : ''}" onclick="bgSet('punch',(D.bg.punch+1)%3)" title="Stronger colours (press again for even stronger, then off)">${ic('contrast')}Vivid${b.punch === 2 ? ' ++' : ''}</button>
+      <button class="small ${b.blur ? 'on' : ''}" onclick="bgSet('blur',D.bg.blur?0:6)" title="Blur the picture so the words and the subject stand out">${ic('droplet')}Blur</button>
+      <button class="small ${b.dim ? 'on' : ''}" onclick="bgSet('dim',D.bg.dim?0:0.3)" title="Make the picture darker">${ic('moon')}Darker</button></div>
+    <div class="lab">Good pictures (click one)</div>
+    <div class="tiles">${I.cands.map(x => tileHTML(x.t, x.title)).join('')}</div>
+    ${I.moments.length ? `<div class="row" style="margin-top:10px"><span class="hint" style="margin:0">More from one moment:</span><select id="msel" onchange="loadStrip(this.value)" style="flex:1" title="Pick a moment to see more pictures from it">
+      <option value="">— choose a moment —</option>${I.moments.map(m => `<option value="${m.i}" ${String(m.i) === momentI ? 'selected' : ''}>${m.i}. ${esc(m.title)}</option>`).join('')}</select></div>
+    <div class="tiles" id="strip" style="margin-top:7px">${stripT.map(x => tileHTML(x, '')).join('')}</div>` : ''}</div>`;
+  h += `<div class="sec"><h3><span class="num">4</span>Subject <span class="hint">(a person or thing, cut out of its background)</span></h3>${subjectHTML()}</div>`;
+  h += `<div class="sec"><h3><span class="num">5</span>Stickers <span class="hint">(click to add · then drag it)</span></h3>
+    <div class="emo">${I.emoji.map(x => `<img src="/api/thumbs/emoji/${encodeURIComponent(x.file)}" title="Add ${x.e}" alt="${x.e}" onclick="addEmoji('${x.e}')">`).join('')}</div>
+    <div class="row" style="margin-top:9px"><button class="small" onclick="addShape('arrow')" title="Add an arrow">${ic('arrow-up-right')}Arrow</button><button class="small" onclick="addShape('circle')" title="Add a circle">${ic('circle')}Circle</button></div></div>`;
+  const keepY = $('#right').scrollTop; $('#right').innerHTML = h; $('#right').scrollTop = keepY;
+  const br = $('#brief'); br.addEventListener('input', () => { briefTxt = br.value; }); br.addEventListener('change', () => api('/api/thumbs/brief', body({text: br.value})));
+  $('#aiq').addEventListener('input', e => { aiPrompt = e.target.value; }); $('#aicount').addEventListener('input', e => { aiCount = e.target.value; });
+  const tx = $('#tx'); tx.addEventListener('focus', () => { remember(); });
+  tx.addEventListener('input', () => { D.text.s = tx.value; setDirty(true); drawSoon(250); $('#fontrow').innerHTML = fontButtons(); warns(); });
+  const ts = $('#tslider'); ts.addEventListener('input', () => { $('#tlabel').textContent = `at ${mmss(+ts.value)} of the video`; });
+  ts.addEventListener('change', () => pickT(+ts.value));
+}
+function tileHTML(t, title) { return `<div class="ftile ${D && Math.abs(t - D.bg.t) < 0.15 ? 'cur' : ''}" onclick="pickT(${t})" title="${esc(title ? title + ' — ' : '')}${mmss(t)}"><img loading="lazy" alt="" src="/api/thumbs/tile?${PV}&t=${t}&k=${encodeURIComponent(I.key)}"><span>${mmss(t)}</span></div>`; }
+async function loadStrip(i) { momentI = i; stripT = []; if (i) { const r = await api(`/api/thumbs/strip?${PV}&i=${i}`); stripT = r.times || []; } $('#strip').innerHTML = stripT.map(x => tileHTML(x, '')).join(''); }
+function setT(k, v) { remember(); D.text[k] = v; draw(); panel(); }
+function useText(i) { const x = I.texts[i]; remember(); D.text.s = x.s;
+  if (x.e && !D.stickers.some(s => s.k === 'emoji')) D.stickers.push({k: 'emoji', e: x.e, x: .1, y: .18, s: .28, rot: 10});
+  draw(); panel(); warns(); }
+function bgSet(k, v) { remember(); D.bg[k] = v; drawSoon(k === 'z' ? 60 : 0); if (k !== 'z') panel(); }
+function nudge(d) { const t = Math.min(I.dur_s, Math.max(0, +(D.bg.t + d).toFixed(1))); remember(); D.bg.t = t; draw(); panel(); }
+async function pickT(t) {
+  remember(); D.bg.t = t; waitBox('Finding the action in this picture…');
+  const r = await api('/api/thumbs/layout', body({design: D})); waitBox('');
+  if (r.design) D = r.design; else if (r.error) say('⚠️ ' + r.error); draw(); panel();
+}
+async function style_(p, quiet) {
+  if (!quiet) remember(); waitBox('Arranging…');
+  const r = await api('/api/thumbs/layout', body({design: D, preset: p})); waitBox('');
+  if (r.design) D = r.design; if (r.error) say('⚠️ ' + r.error); else say(r.note || '');
+  sel = null; draw(); panel();
+}
+function addEmoji(e) { remember(); D.stickers.push({k: 'emoji', e, x: .86, y: .2, s: .28, rot: -8}); sel = 's' + (D.stickers.length - 1); draw(); }
+function addShape(k) { remember(); D.stickers.push(k === 'arrow' ? {k, x: .5, y: .45, s: .26, rot: -30, color: '#ff1e1e'} : {k, x: .5, y: .45, s: .16, color: '#ffe600'}); sel = 's' + (D.stickers.length - 1); draw(); }
+
+// ---------- 4 · subject: cut out of the video's picture, or an uploaded image ----------
+const SLOTKEY = () => slot === 2 ? 'subject2' : 'subject';
+function cutText(st, extra) {
+  if (st === 'working') return '✂️ Cutting it out of its background… (about 30-60 seconds, only the first time)';
+  if (st === 'queued') return '🕒 In the work line — it starts when the job before it is done.';
+  if (st === 'waiting') return `⏸ Waiting until ${esc(extra || 'a program')} closes, so your PC stays smooth — or press Run now (top).`;
+  if (st === 'no-model') return '⚠️ Cutting out needs the cut-out AI, which is not installed yet. Download it in <a href="/settings.html">Settings</a> → “Fonts, emoji and the cut-out model”. (A PNG picture with a see-through background works without it.)';
+  if (st === 'error') return '⚠️ ' + esc(extra || 'The cut-out did not work. Try another picture.');
+  return '';
+}
+function subjectHTML() {
+  const c = D[SLOTKEY()];
+  let h = `<div class="row"><button class="small ${slot === 1 ? 'on' : ''}" onclick="slot=1;panel()" title="The main subject">${ic('user-round')}Subject 1</button>
+    <button class="small ${slot === 2 ? 'on' : ''}" onclick="slot=2;panel()" title="A second subject, for the VS style">${ic('swords')}Subject 2 (for VS)</button></div>
+    <div class="row" style="margin-top:8px"><button class="small" onclick="cutFrame()" title="Cut the person or thing out of the picture you see now (BroClips' cut-out AI, on this PC)">${ic('scissors')}Cut out from this picture</button>
+    <button class="small" onclick="$('#upfile').click()" title="Your photo or a logo. A PNG with a see-through background is used as it is; other pictures are cut out.">${ic('upload')}Upload an image</button>
+    ${c ? `<button class="small" onclick="noSubject()" title="No subject in this slot">${ic('ban')}None</button>` : ''}</div>`;
+  if (!I.cut_model) h += `<div class="hint">The cut-out AI is not installed yet (<a href="/settings.html">Settings</a>). Without it you can still upload a PNG with a see-through background.</div>`;
+  const st = c ? (cutInfo[c.id] || 'ready') : '';
+  if (c && st !== 'ready') h += `<div class="msg" id="cutmsg">${cutText(st, cutPolls[c.id] && cutPolls[c.id].extra)}</div>`;
+  if (I.subjects.length) h += `<div class="lab">Your pictures (click one to use it here)</div><div class="subs">${I.subjects.map(s =>
+      `<div class="sub ${c && c.id === s.id ? 'cur' : ''}" onclick="useSubject('${s.id}')" title="${esc(s.name || (s.how === 'upload' ? 'Uploaded picture' : 'Cut out of the video'))}${s.here ? '' : ' (from another video of this project)'}"><img loading="lazy" alt="" src="/api/thumbs/subject?id=${s.id}"><span>${s.state === 'ready' ? ic(s.how === 'upload' ? 'upload' : 'scissors') : s.state === 'no-model' ? ic('triangle-alert') : ic('loader', 'spin')}</span></div>`).join('')}</div>`;
+  if (c) h += `<div class="row" style="margin-top:9px"><button class="small ${c.on ? 'on' : ''}" onclick="subSet('on',!D[SLOTKEY()].on)" title="Show or hide it">${ic(c.on ? 'eye' : 'eye-off')}${c.on ? 'Shown' : 'Hidden'}</button>
+      <button class="small" onclick="sel=SLOTKEY();flip()" title="Mirror it (left ↔ right)">${ic('flip-horizontal')}Mirror</button><button class="small iconbtn" onclick="sel=SLOTKEY();grow(1.1)" title="Bigger" aria-label="Bigger">${ic('zoom-in')}</button><button class="small iconbtn" onclick="sel=SLOTKEY();grow(1/1.1)" title="Smaller" aria-label="Smaller">${ic('zoom-out')}</button>
+      <button class="small ${c.line ? 'on' : ''}" onclick="subSet('line',D[SLOTKEY()].line?null:'#ffffff')" title="A white outline around it">${ic('square-dashed')}Outline</button></div>
+    <div class="row colors" style="margin-top:8px"><span class="hint" style="margin:0 4px 0 0">Glow</span>${I.glows.map(g => `<button style="background:${g};${c.glow === g ? 'border-color:#fff;box-shadow:0 0 0 3px rgba(255,255,255,.25)' : ''}" onclick="subSet('glow','${g}')" title="A ${g} glow behind it" aria-label="Glow ${g}"></button>`).join('')}<button class="small" style="width:auto;border-radius:9px;height:28px" onclick="subSet('glow',null)" title="No glow">none</button></div>`;
+  return h;
+}
+function subSet(k, v) { const c = D[SLOTKEY()]; if (!c) return; remember(); c[k] = v; draw(); panel(); }
+function noSubject() { remember(); D[SLOTKEY()] = null; if (D.preset === 'split' || (slot === 1 && D.preset === 'subject')) { style_(slot === 1 ? 'zoom' : 'subject', true); } else { draw(); panel(); } }
+function addSubjectItem(id, how, name, state) {
+  I.subjects = [{id, how, name: name || '', here: true, state}].concat(I.subjects.filter(s => s.id !== id));
+}
+async function setSubject(id, state) {
+  remember();
+  const old = D[SLOTKEY()];
+  D[SLOTKEY()] = {id, x: .75, y: .55, h: .9, flip: false, line: '#ffffff', glow: old && old.glow || (slot === 2 ? '#ff3355' : I.glows[0]), on: true};
+  cutInfo[id] = state;
+  if (state === 'ready') await applySubjectStyle(); else { if (['working', 'queued', 'waiting'].includes(state)) waitCut(id); panel(); draw(); }
+}
+async function applySubjectStyle() {
+  const p = slot === 2 || D.preset === 'split' ? 'split' : 'subject';
+  await style_(p, true);
+}
+async function useSubject(id) {
+  const s = I.subjects.find(x => x.id === id) || {};
+  const r = await api('/api/thumbs/subject/use', body({id, slot}));
+  await setSubject(id, r.state || s.state || 'ready');
+}
+async function cutFrame() {
+  waitBox('Getting ready…');
+  const r = await api('/api/thumbs/subject/frame', body({t: D.bg.t, slot})); waitBox('');
+  if (!r.id) { say('⚠️ ' + (r.error || 'Could not start.')); return; }
+  addSubjectItem(r.id, 'frame', `Cut out at ${mmss(D.bg.t)}`, r.state);
+  if (r.error) say('⚠️ ' + r.error);
+  await setSubject(r.id, r.state);
+}
+async function fileToData(file) {
+  const raw = await new Promise((ok, bad) => { const r = new FileReader(); r.onload = () => ok(r.result); r.onerror = bad; r.readAsDataURL(file); });
+  if (raw.length < 4500000) return raw;
+  // too big for one request: draw it smaller (PNG and WebP keep a see-through background)
+  const img = await new Promise((ok, bad) => { const i = new Image(); i.onload = () => ok(i); i.onerror = bad; i.src = raw; });
+  const k = Math.min(1, 2048 / Math.max(img.width, img.height)), c = document.createElement('canvas');
+  c.width = Math.round(img.width * k); c.height = Math.round(img.height * k);
+  c.getContext('2d').drawImage(img, 0, 0, c.width, c.height);
+  let out = c.toDataURL(file.type === 'image/jpeg' ? 'image/jpeg' : 'image/png', 0.92);
+  if (out.length >= 4500000) out = c.toDataURL('image/webp', 0.9);
+  if (out.length >= 4500000) out = c.toDataURL('image/jpeg', 0.85);
+  return out;
+}
+$('#upfile').addEventListener('change', async e => {
+  const file = e.target.files[0]; e.target.value = ''; if (!file) return;
+  waitBox('Reading the picture…');
+  let data; try { data = await fileToData(file); } catch (ex) { waitBox(''); say('⚠️ That file is not a picture this page can read.'); return; }
+  waitBox('Sending it to BroClips…');
+  const r = await api('/api/thumbs/subject/upload', body({name: file.name, data, slot})); waitBox('');
+  if (!r.id) { say('⚠️ ' + (r.error || 'Could not use that picture.')); return; }
+  addSubjectItem(r.id, 'upload', file.name, r.state);
+  if (r.error) say('⚠️ ' + r.error);
+  await setSubject(r.id, r.state);
+});
+function waitCut(id) {
+  if (cutPolls[id] && cutPolls[id].timer) return;
+  cutPolls[id] = {timer: setInterval(async () => {
+    const r = await api(`/api/thumbs/cut?${PV}&id=${encodeURIComponent(id)}`);
+    if (r.offline) return;
+    const st = r.state; cutInfo[id] = st; cutPolls[id].extra = r.waiting_for || r.msg || '';
+    const s = I.subjects.find(x => x.id === id); if (s) s.state = st;
+    if (!['working', 'queued', 'waiting'].includes(st)) {
+      clearInterval(cutPolls[id].timer); cutPolls[id].timer = null;
+      const mine = D && ['subject', 'subject2'].find(k => D[k] && D[k].id === id);
+      if (st === 'ready' && mine) { const was = slot; slot = mine === 'subject2' ? 2 : 1; await applySubjectStyle(); slot = was; panel(); }
+      else panel();
+      if (st === 'ready') toast('Cut out — it is on your thumbnail now.');
+    } else { const m = $('#cutmsg'); if (m) m.innerHTML = cutText(st, cutPolls[id].extra); }
+  }, 2000)};
+}
+
+// ---------- 🎲 random mix / ✨ AI ----------
+async function moreRandom() {
+  if (!sure('more', 'This thumbnail is not saved yet. Click Random mix again to make new ones without saving it.')) return; setDirty(false);
+  waitBox('Making random thumbnails…');
+  const r = await api('/api/thumbs/more', body({count: aiCount || 6})); waitBox('');
+  if (!r.ok) { say('⚠️ ' + (r.error || 'Could not make them.')); if (r.thumbs) { I.thumbs = r.thumbs; tabs(); } return; }
+  I.thumbs = r.thumbs; await openThumb(r.made[0], true);
+  say(`🎲 Made ${r.made.length} new thumbnails (${r.made[0]} to ${r.made[r.made.length - 1]}). Press again for more — or “All · delete several” to delete the ones you don't like.`);
+}
+async function moreAI() {
+  await api('/api/thumbs/brief', body({text: briefTxt || ''}));
+  const r = await api('/api/thumbs/ai', body({prompt: aiPrompt, count: aiCount}));
+  if (!r.ok) { aiShow('⚠️ ' + (r.error || 'Could not start.')); return; }
+  aiJob = r.job && r.job.id; aiShow(`✨ The AI will design ${r.count} thumbnails… (about 1 minute)`); pollAI();
+}
+function aiShow(t) { const m = $('#aimsg'); if (m) m.textContent = t; }
+function pollAI() {
+  clearInterval(aiPoll);
+  aiPoll = setInterval(async () => {
+    const s = await api(`/api/thumbs/aistate?${PV}&job=${encodeURIComponent(aiJob || '')}`);
+    if (s.offline) return;
+    if (s.state === 'working') aiShow('✨ The AI is designing your thumbnails… (about 1 minute)');
+    else if (s.state === 'waiting') aiShow(`⏸ Waiting until ${s.waiting_for} closes, so your PC stays smooth — or press Run now (top).`);
+    else if (s.state === 'queued') aiShow(`🕒 Waiting in the work line (${s.ahead || 1} job${s.ahead === 1 ? '' : 's'} first)…`);
+    else {
+      clearInterval(aiPoll); aiPoll = null; I.thumbs = s.thumbs || I.thumbs; tabs(); aiShow(s.msg || '');
+      if (s.made && s.made.length && !dirty) openThumb(s.made[0], true).then(() => aiShow(s.msg));
+    }
+  }, 3000);
+}
+
+// ---------- all thumbnails, delete several ----------
+function gallery(open) { $('#gal').hidden = !open; if (!open) return; galSel.clear(); galDraw(); }
+function galDraw() {
+  $('#galgrid').innerHTML = I.thumbs.map(t => `<div class="gi ${galSel.has(t.n) ? 'on' : ''}" onclick="galTick(${t.n})" title="Click to tick it"><img loading="lazy" alt="" src="/files/${encodeURIComponent(PID)}/${encodeURIComponent(VID)}/${t.file}?v=${t.v}">
+    <span class="n" onclick="event.stopPropagation();gallery(false);openThumb(${t.n})" title="Open it">${t.n}${ic('external-link')}</span><input type="checkbox" ${galSel.has(t.n) ? 'checked' : ''} onclick="event.stopPropagation();galTick(${t.n})" title="Tick it" aria-label="Tick thumbnail ${t.n}"></div>`).join('') || '<div class="hint">No thumbnails yet.</div>';
+  $('#galdel').innerHTML = `${ic('trash')}Delete ticked (${galSel.size})`; $('#galdel').disabled = !galSel.size;
+}
+function galTick(n) { galSel.has(n) ? galSel.delete(n) : galSel.add(n); galDraw(); }
+function galAll(on) { galSel = new Set(on ? I.thumbs.map(t => t.n) : []); galDraw(); }
+async function galDelete(btn) {
+  if (!galSel.size || !confirmClick(btn, `Sure? Click again to delete ${galSel.size}`)) return;
+  const r = await api('/api/thumbs/delete_many', body({ns: [...galSel]})); if (r.thumbs) I.thumbs = r.thumbs; if (!r.ok) say('⚠️ ' + (r.error || 'Could not delete.'));
+  const gone = galSel.has(N); galSel.clear(); galDraw(); tabs();
+  if (gone) { setDirty(false); await openThumb(I.thumbs[0] ? I.thumbs[0].n : null, true); }
+}
+
+// ---------- save / delete / 3 new automatic ----------
+async function autoNew() {
+  if (!sure('auto', 'This thumbnail is not saved yet. Click “3 new automatic” again to make new ones without saving it.')) return; setDirty(false);
+  waitBox('Making 3 new thumbnails… (about 10-30 seconds)');
+  const r = await api('/api/thumbs/auto', body()); waitBox('');
+  if (!r.ok) { say('⚠️ ' + (r.error || 'Could not make them.')); return; }
+  I.thumbs = r.thumbs; await openThumb(r.first, true);
+  say(`✅ Made ${r.made} new thumbnails (${r.first} to ${r.first + r.made - 1}). Your old ones are still there.`);
+}
+async function save(asNew) {
+  const r = await api('/api/thumbs/save', body({n: asNew ? null : N, design: D}));
+  if (!r.ok) { say('⚠️ ' + (r.error || 'Could not save.')); return; }
+  I.thumbs = r.thumbs; N = r.n; setDirty(false); tabs(); say(`✅ Saved as thumbnail ${r.n} (in the video's thumbs folder, ready to upload).`);
+  toast(`Saved as thumbnail ${r.n}.`);
+}
+async function delThumb(btn) {
+  if (N === null || !confirmClick(btn, 'Sure?')) return;
+  const r = await api('/api/thumbs/delete', body({n: N})); if (!r.ok) { say('⚠️ ' + (r.error || 'Could not delete.')); return; }
+  I.thumbs = r.thumbs; setDirty(false); await openThumb(I.thumbs[0] ? I.thumbs[0].n : null, true);
+}
+start();
+</script>
+</body>
+</html>
